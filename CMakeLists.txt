@@ -8,6 +8,7 @@ include_directories(include/)
 add_executable(Lumin	src/main.cpp
 						src/Window/Window.cpp
 						src/Renderer/Renderer.cpp
+						src/Shaders/Shaders.cpp
 )
 
 add_subdirectory(dependencies/glfw)

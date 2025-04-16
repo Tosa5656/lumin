@@ -6,6 +6,7 @@
 #include <GLFW/glfw3.h>
 
 #include <Vectors/Vectors.h>
+#include <Shaders/Shaders.h>
 #include <Renderer/Renderer.h>
 
 class Window
