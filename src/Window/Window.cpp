@@ -51,9 +51,9 @@ void Window::Init()
     glDeleteShader(fragmentShader.getId());
 
     float vertices[] = {
-        -0.5f, -0.5f, 0.0f,
-         0.5f, -0.5f, 0.0f,
-         0.0f,  0.5f, 0.0f
+        -1.0f, -1.0f, 0.0f,
+         1.0f, -1.0f, 0.0f,
+         0.0f,  1.0f, 0.0f,
     };
 
     float colors[] = {
@@ -67,6 +67,16 @@ void Window::Init()
     glGenBuffers(2, VBO);
 
     glBindVertexArray(VAO);
+
+    glm::mat4 Projection = glm::perspective(glm::radians(45.0f), 4.0f / 3.0f, 0.1f, 100.0f);
+    glm::mat4 View = glm::lookAt(
+        glm::vec3(4, 3, 3),
+        glm::vec3(0, 0, 0),
+        glm::vec3(0, 1, 0)
+    );
+    glm::mat4 Model = glm::mat4(1.0f);
+    glm::mat4 MVP = Projection * View * Model;
+    GLuint MatrixID = glGetUniformLocation(shaderProgram.getId(), "MVP");
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
@@ -86,6 +96,7 @@ void Window::Init()
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(shaderProgram.getId());
+        glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glBindVertexArray(0);
