@@ -39,7 +39,7 @@ set timeout=10
 set default=0
 
 menuentry "Lumin" {
-    multiboot2 /boot/kernel.bin
+    multiboot2 /kernel.bin
     
     set gfxpayload=keep
     boot

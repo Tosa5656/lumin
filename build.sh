@@ -1,3 +1,4 @@
-mkdir -p iso/boot
-nasm -f elf32 src/boot/boot.asm -o iso/boot/boot.o
-ld -m elf_i386 -Ttext 0x100000 -Tdata 0x200000 -Tbss 0x300000 -nostdlib --build-id=none iso/boot/boot.o -o iso/boot/kernel.bin
+mkdir -p {obj,iso}
+nasm -f elf64 src/bootloader.asm -o obj/bootloader.o
+cargo build --release --target x86_64-unknown-none
+ld -n -T linker.ld -o iso/kernel.bin obj/bootloader.o target/x86_64-unknown-none/release/liblumin.a
