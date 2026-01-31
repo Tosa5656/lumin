@@ -34,8 +34,10 @@ pub fn hlt() -> !
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn kernel_entry() -> !
+pub extern "C" fn kernel_entry(magic: u64, mb_info_addr: u64) -> !
 {
+    let mb_info_ptr = mb_info_addr as *const u8;
+
     init();
 
     hlt();

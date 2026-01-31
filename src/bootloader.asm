@@ -13,11 +13,18 @@ header_start:
     dd 8
 header_end:
 
+section .data
+multiboot_magic: dd 0
+multiboot_info:  dd 0
+
 section .text
 global _start
 
 _start:
     mov esp, stack_top
+
+    mov [multiboot_magic], eax
+    mov [multiboot_info], ebx
 
     call setup_paging
     
@@ -66,8 +73,14 @@ long_mode_entry:
 
     mov rsp, stack_top
     
-    mov rdi, rsi
-    mov rsi, rdi 
+    xor rax, rax
+    xor rbx, rbx
+    mov eax, [multiboot_magic]
+    mov ebx, [multiboot_info]
+    
+
+    mov rdi, rax
+    mov rsi, rbx  
 
     call kernel_entry
 
