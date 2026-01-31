@@ -7,14 +7,29 @@ pub mod vga;
 pub mod gdt;
 pub mod interrupts;
 pub mod multiboot;
+pub mod paging;
+pub mod allocator;
+
+pub use paging::paging::{PageTables, PAGE_SIZE, ENTRIES_PER_TABLE};
+pub use allocator::allocator::{init_frame_allocator, allocate_frame, deallocate_frame, get_frame_allocator_stats};
 
 use core::panic::PanicInfo;
 use spin::Mutex;
 use lazy_static::lazy_static;
 use multiboot::MultibootInfo;
+use allocator::allocator::FRAME_ALLOCATOR;
+use x86_64::structures::paging::Mapper;
+
 
 const IS_DEBUG: bool = false;
 const LUMIN_VERSION: &str = "0.1";
+const LUMIN_LOGO: &str = r" _                        _        
+| |     _   _  _ __ ___  (_) _ __  
+| |    | | | || '_ ` _ \ | || '_ \ 
+| |___ | |_| || | | | | || || | | |
+|_____| \__,_||_| |_| |_||_||_| |_|";
+                                   
+
 
 lazy_static! {
     static ref MULTIBOOT_INFO: Mutex<Option<multiboot::MultibootInfo>> = Mutex::new(None);
@@ -22,6 +37,8 @@ lazy_static! {
 
 pub fn init()
 {
+    paging::paging::init();
+    init_frame_allocator();
     gdt::init();
     interrupts::init_idt();
     unsafe { interrupts::PICS.lock().initialize(); }
@@ -53,14 +70,16 @@ pub extern "C" fn kernel_entry(magic: u64, mb_info_addr: u64) -> !
             hlt();
         }
     };
-    
+
     *MULTIBOOT_INFO.lock() = Some(boot_info);
     
     if IS_DEBUG == true
     {
         print_multiboot_info();
     }
-    
+
+    println!("{}", LUMIN_LOGO);
+
     hlt();
 }
 
@@ -88,11 +107,50 @@ pub fn get_total_memory() -> Option<u64>
 {
     let info = MULTIBOOT_INFO.lock();
     let info = info.as_ref()?;
-    
+
     info.memory_map_entries.map(|entries|
     {
         entries.iter().filter(|e| e.typ == 1).map(|e| e.length).sum()
     })
+}
+
+pub fn create_page_tables() -> PageTables
+{
+    PageTables::new()
+}
+
+pub fn map_page(virt_addr: x86_64::VirtAddr, phys_frame: x86_64::structures::paging::PhysFrame<x86_64::structures::paging::Size4KiB>)
+{
+    use x86_64::structures::paging::{OffsetPageTable, Page, PageTableFlags, Size4KiB};
+    use x86_64::registers::control::Cr3;
+
+    let page = Page::<Size4KiB>::containing_address(virt_addr);
+    let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
+
+    let (l4_frame, _) = Cr3::read();
+    let phys = l4_frame.start_address();
+    let virt = x86_64::VirtAddr::new(phys.as_u64());
+    let mut mapper = unsafe { OffsetPageTable::new(&mut *virt.as_mut_ptr(), virt) };
+
+    unsafe
+    {
+        mapper.map_to(page, phys_frame, flags, &mut *FRAME_ALLOCATOR.lock().as_mut().unwrap()).unwrap().flush();
+    }
+}
+
+pub fn unmap_page(virt_addr: x86_64::VirtAddr)
+{
+    use x86_64::structures::paging::{OffsetPageTable, Page, Size4KiB};
+    use x86_64::registers::control::Cr3;
+
+    let page = Page::<Size4KiB>::containing_address(virt_addr);
+
+    let (l4_frame, _) = Cr3::read();
+    let phys = l4_frame.start_address();
+    let virt = x86_64::VirtAddr::new(phys.as_u64());
+    let mut mapper = unsafe { OffsetPageTable::new(&mut *virt.as_mut_ptr(), virt) };
+
+    mapper.unmap(page).unwrap().1.flush();
 }
 
 fn print_multiboot_info()
