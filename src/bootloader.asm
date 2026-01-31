@@ -66,6 +66,9 @@ long_mode_entry:
 
     mov rsp, stack_top
     
+    mov rdi, rsi
+    mov rsi, rdi 
+
     call kernel_entry
 
 .stop:

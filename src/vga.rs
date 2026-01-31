@@ -2,6 +2,7 @@ use core::fmt;
 use volatile::Volatile;
 use lazy_static::lazy_static;
 use spin::Mutex;
+use x86_64::instructions::interrupts;
 
 // ==================Color======================
 #[allow(dead_code)]
@@ -26,6 +27,9 @@ pub enum Color
     Yellow = 14,
     White = 15
 }
+
+static mut TEXT_COLOR: Color = Color::White;
+static mut BACKGROUND_COLOR: Color = Color::Black;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
@@ -152,7 +156,7 @@ lazy_static!
     {
         column_position: 0,
         current_row: 0,
-        color_code: ColorCode::new(Color::White, Color::Black),
+        color_code: ColorCode::new(unsafe{TEXT_COLOR}, unsafe{BACKGROUND_COLOR}),
         buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
     });
 }
@@ -183,20 +187,19 @@ pub fn _print(args: fmt::Arguments)
     });
 }
 
-pub fn test_println_output()
+pub fn set_text_color(color: Color)
 {
-    use core::fmt::Write;
-    use x86_64::instructions::interrupts;
-
-    let s = "Some test string that fits on a single line";
-    interrupts::without_interrupts(||
-        {
+    interrupts::without_interrupts(|| {
         let mut writer = WRITER.lock();
-        writeln!(writer, "\n{}", s).expect("writeln failed");
-        for (i, c) in s.chars().enumerate()
-        {
-            let screen_char = writer.buffer.chars[BUFFER_HEIGHT - 2][i].read();
-            assert_eq!(char::from(screen_char.ascii_character), c);
-        }
+        writer.color_code = ColorCode::new(color, unsafe { BACKGROUND_COLOR });
+    });
+}
+
+pub fn set_background_color(color: Color)
+{
+    interrupts::without_interrupts(|| {
+        let mut writer = WRITER.lock();
+        writer.color_code = ColorCode::new(unsafe { TEXT_COLOR }, color);
+        unsafe { BACKGROUND_COLOR = color };
     });
 }

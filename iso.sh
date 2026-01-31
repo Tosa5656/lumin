@@ -35,7 +35,7 @@ insmod multiboot2
 insmod part_msdos
 insmod ext2
 
-set timeout=10
+set timeout=1
 set default=0
 
 menuentry "Lumin" {
