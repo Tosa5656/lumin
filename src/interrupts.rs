@@ -44,7 +44,14 @@ lazy_static!
         
         unsafe
         {
+            idt.divide_error.set_handler_fn(divide_error_handler).set_stack_index(gdt::GENERAL_PROTECTION_IST_INDEX);
+            idt.invalid_opcode.set_handler_fn(invalid_opcode_handler).set_stack_index(gdt::GENERAL_PROTECTION_IST_INDEX);
+            idt.invalid_tss.set_handler_fn(invalid_tss_handler).set_stack_index(gdt::GENERAL_PROTECTION_IST_INDEX);
+            idt.segment_not_present.set_handler_fn(segment_not_present_handler).set_stack_index(gdt::GENERAL_PROTECTION_IST_INDEX);
+            idt.stack_segment_fault.set_handler_fn(stack_segment_fault_handler).set_stack_index(gdt::GENERAL_PROTECTION_IST_INDEX);
+            idt.alignment_check.set_handler_fn(alignment_check_handler).set_stack_index(gdt::GENERAL_PROTECTION_IST_INDEX);
             idt.double_fault.set_handler_fn(double_fault_handler).set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
+            idt.general_protection_fault.set_handler_fn(general_protection_fault_handler).set_stack_index(gdt::GENERAL_PROTECTION_IST_INDEX);
         }
 
         idt[InterruptIndex::Timer.as_usize()].set_handler_fn(timer_interrupt_handler);
@@ -58,15 +65,68 @@ pub fn init_idt()
 {
     IDT.load();
 }
-
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame)
 {
     println!("Exception: breakpoint\n{:#?}", stack_frame);
 }
 
+extern "x86-interrupt" fn divide_error_handler(stack_frame: InterruptStackFrame)
+{
+    println!("Exception: divide error");
+    println!("{:#?}", stack_frame);
+    crate::hlt();
+}
+
+extern "x86-interrupt" fn invalid_opcode_handler(stack_frame: InterruptStackFrame)
+{
+    println!("Exception: invalid opcode");
+    println!("{:#?}", stack_frame);
+    crate::hlt();
+}
+
+extern "x86-interrupt" fn invalid_tss_handler(stack_frame: InterruptStackFrame, error_code: u64)
+{
+    println!("Exception: invalid TSS");
+    println!("Error code: {:#x}", error_code);
+    println!("{:#?}", stack_frame);
+    crate::hlt();
+}
+
+extern "x86-interrupt" fn segment_not_present_handler(stack_frame: InterruptStackFrame, error_code: u64)
+{
+    println!("Exception: segment not present");
+    println!("Error code: {:#x}", error_code);
+    println!("{:#?}", stack_frame);
+    crate::hlt();
+}
+
+extern "x86-interrupt" fn stack_segment_fault_handler(stack_frame: InterruptStackFrame, error_code: u64)
+{
+    println!("Exception: stack segment fault");
+    println!("Error code: {:#x}", error_code);
+    println!("{:#?}", stack_frame);
+    crate::hlt();
+}
+
+extern "x86-interrupt" fn alignment_check_handler(stack_frame: InterruptStackFrame, error_code: u64)
+{
+    println!("Exception: alignment check");
+    println!("Error code: {:#x}", error_code);
+    println!("{:#?}", stack_frame);
+    crate::hlt();
+}
+
 extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame, _error_code: u64) -> !
 {
     panic!("Exception: double fault\n{:#?}", stack_frame);
+}
+
+extern "x86-interrupt" fn general_protection_fault_handler(stack_frame: InterruptStackFrame, error_code: u64,)
+{
+    println!("Exception: general protection fault");
+    println!("Error code: {:#x}", error_code);
+    println!("{:#?}", stack_frame);
+    crate::hlt();
 }
 
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame)
