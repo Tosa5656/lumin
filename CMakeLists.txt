@@ -3,7 +3,9 @@ cmake_minimum_required(VERSION 4.0)
 set(PROJECT_NAME lumin_engine)
 project(${PROJECT_NAME})
 
-set(PROJECT_SOURCES src/main.cpp)
+set(PROJECT_SOURCES src/main.cpp
+					src/window.cpp
+					src/window_manager.cpp)
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 include_directories(${PROJECT_NAME} src/)
