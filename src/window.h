@@ -4,6 +4,7 @@
 
 #include <GLFW/glfw3.h>
 
+#include <vectors.h>
 #include <renderer.h>
 
 class Window
@@ -11,18 +12,21 @@ class Window
 public:
 	Window();
 	Window(std::string title, int width, int height);
+	Window(std::string title, Vector2 size);
 
 	~Window() { };
 
 	bool Update();
 
+	void SetTitle(std::string title);
+
 	GLFWwindow* GetNativeWindow() { return m_window; }
+	std::string GetTitle() { return m_title; }
 private:
 	void Init();
 
 	GLFWwindow* m_window;
 	
 	std::string m_title = "";
-	int m_width = 0;
-	int m_height = 0;
+	Vector2 m_size = Vector2(800, 600);
 };
