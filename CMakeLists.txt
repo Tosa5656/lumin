@@ -3,9 +3,12 @@ cmake_minimum_required(VERSION 4.0)
 set(PROJECT_NAME lumin_engine)
 project(${PROJECT_NAME})
 
+set(CMAKE_CXX_STANDARD 23)
+
 set(PROJECT_SOURCES src/main.cpp
 					src/window.cpp
-					src/window_manager.cpp)
+					src/window_manager.cpp
+					src/renderer.cpp)
 
 include(FetchContent)
 

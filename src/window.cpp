@@ -31,6 +31,9 @@ void Window::Init()
 	m_window = glfwCreateWindow(m_size.x, m_size.y, m_title.c_str(), nullptr, nullptr);
 	if (!m_window)
 		return;
+
+	m_renderer = new Renderer(this);
+	m_renderer->Init();
 }
 
 bool Window::Update()

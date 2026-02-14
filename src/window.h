@@ -5,7 +5,8 @@
 #include <GLFW/glfw3.h>
 
 #include <vectors.h>
-#include <renderer.h>
+#include "renderer.h"
+class Renderer;
 
 class Window
 {
@@ -29,4 +30,6 @@ private:
 	
 	std::string m_title = "";
 	Vector2 m_size = Vector2(800, 600);
+
+	Renderer* m_renderer;
 };
