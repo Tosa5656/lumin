@@ -28,7 +28,7 @@ void Renderer::Init()
 
 	if (enableValidationLayers && !CheckValidationLayerSupport())
 	{
-		// Validation not supported
+		std::cerr << "Validation layers doesn`t supported!" << std::endl;
 	}
 
 	if (enableValidationLayers)
@@ -128,6 +128,70 @@ void Renderer::Init()
 	uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
 	if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount)
 		imageCount = swapChainSupport.capabilities.maxImageCount;
+
+	VkSwapchainCreateInfoKHR swapChainCreateInfo = {};
+	swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	swapChainCreateInfo.surface = m_surface;
+	swapChainCreateInfo.minImageCount = imageCount;
+	swapChainCreateInfo.imageFormat = surfaceFormat.format;
+	swapChainCreateInfo.imageExtent = extent;
+	swapChainCreateInfo.imageArrayLayers = 1;
+	swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+	uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value()};	
+
+	if(indices.graphicsFamily != indices.presentFamily)
+	{
+		swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+		swapChainCreateInfo.queueFamilyIndexCount = 2;
+		swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
+	}
+	else
+	{
+		swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		swapChainCreateInfo.queueFamilyIndexCount = 0;
+		swapChainCreateInfo.pQueueFamilyIndices = nullptr;
+	}
+
+	swapChainCreateInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+	swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
+
+	vkCreateSwapchainKHR(m_device, &swapChainCreateInfo, nullptr, &m_swapchain);
+
+	vkGetSwapchainImagesKHR(m_device, m_swapchain, &imageCount, nullptr);
+	m_swapchain_images.resize(imageCount);
+	vkGetSwapchainImagesKHR(m_device, m_swapchain, &imageCount, m_swapchain_images.data());
+
+	m_swapchain_image_format = surfaceFormat.format;
+	m_swapchain_extent = extent;
+
+	// Creating image views
+	m_swapchain_image_views.resize(m_swapchain_images.size());
+
+	for(size_t i = 0; i < m_swapchain_images.size(); i++)
+	{
+		VkImageViewCreateInfo imageViewCreateInfo;
+		imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		imageViewCreateInfo.image = m_swapchain_images[i];
+
+		imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		imageViewCreateInfo.format = m_swapchain_image_format;
+
+		imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+		imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+		imageViewCreateInfo.subresourceRange.levelCount = 1;
+		imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+		imageViewCreateInfo.subresourceRange.layerCount = 1;
+
+		vkCreateImageView(m_device, &imageViewCreateInfo, nullptr, &m_swapchain_image_views[i]);
+
+	}
 }
 
 bool Renderer::CheckValidationLayerSupport()

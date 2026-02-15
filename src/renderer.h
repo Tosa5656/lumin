@@ -60,6 +60,9 @@ public:
 	{
 		vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
 		vkDestroyInstance(m_instance, nullptr);
+		vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
+		for (auto imageView : m_swapchain_image_views)
+        	vkDestroyImageView(m_device, imageView, nullptr);
 		vkDestroyDevice(m_device, nullptr);
 	};
 
@@ -99,4 +102,9 @@ private:
 	VkQueue m_graphics_queue;
 	VkQueue m_present_queue;
 	VkSurfaceKHR m_surface;
+	VkSwapchainKHR m_swapchain;
+	std::vector<VkImage> m_swapchain_images;
+	VkFormat m_swapchain_image_format;
+	VkExtent2D m_swapchain_extent;
+	std::vector<VkImageView> m_swapchain_image_views;
 };
