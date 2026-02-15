@@ -65,6 +65,7 @@ public:
 		vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
 		for (auto imageView : m_swapchain_image_views)
         	vkDestroyImageView(m_device, imageView, nullptr);
+		vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
 		vkDestroyDevice(m_device, nullptr);
 	};
 
@@ -112,4 +113,5 @@ private:
 	std::vector<VkImageView> m_swapchain_image_views;
 	VkViewport m_viewport;
 	VkRect2D m_scissor;
+	VkPipelineLayout m_pipeline_layout;
 };
