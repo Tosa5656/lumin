@@ -192,7 +192,93 @@ void Renderer::Init()
 		vkCreateImageView(m_device, &imageViewCreateInfo, nullptr, &m_swapchain_image_views[i]);
 
 	}
-}
+
+	// Creating graphics pipeline
+	m_shaders_manager = ShadersManager(&m_device);
+	auto vertexShaderCode = m_shaders_manager.ReadShader("shaders/default_vert.spv");
+	auto fragmentShaderCode = m_shaders_manager.ReadShader("shaders/default_frag.spv");
+
+	VkShaderModule vertexShaderModule = m_shaders_manager.CreateShaderModule(vertexShaderCode);
+	VkShaderModule fragmentShaderModule = m_shaders_manager.CreateShaderModule(fragmentShaderCode);
+
+	VkPipelineShaderStageCreateInfo vertexShaderStageInfo{};
+	vertexShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	vertexShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+	vertexShaderStageInfo.module = vertexShaderModule;
+	vertexShaderStageInfo.pName = "main";
+
+	VkPipelineShaderStageCreateInfo fragmentShaderStageInfo{};
+	fragmentShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	fragmentShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	fragmentShaderStageInfo.module = fragmentShaderModule;
+	fragmentShaderStageInfo.pName = "main";
+
+	VkPipelineShaderStageCreateInfo shaderStages[] = {
+		vertexShaderStageInfo,
+		fragmentShaderStageInfo
+	};
+
+	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputInfo.vertexBindingDescriptionCount = 0;
+	vertexInputInfo.pVertexBindingDescriptions = nullptr;
+	vertexInputInfo.vertexAttributeDescriptionCount = 0;
+	vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+
+	// Input Assembly
+	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+	inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+	// Viewport
+	m_viewport = VkViewport{};
+	m_viewport.x = 0.0f;
+	m_viewport.y = 0.0f;
+	m_viewport.width = (float)m_swapchain_extent.width;
+	m_viewport.height = (float)m_swapchain_extent.height;
+	m_viewport.minDepth = 0.0f;
+	m_viewport.maxDepth = 1.0f;
+
+	m_scissor = VkRect2D{};
+	m_scissor.offset = {0, 0};
+	m_scissor.extent = m_swapchain_extent;
+
+	// Viewport state
+	VkPipelineViewportStateCreateInfo viewportState{};
+	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportState.viewportCount = 1;
+	viewportState.pViewports = &m_viewport;
+	viewportState.scissorCount = 1;
+	viewportState.pScissors = &m_scissor;
+
+	// Rasterizer
+	VkPipelineRasterizationStateCreateInfo rasterizer{};
+	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer.depthClampEnable = VK_FALSE;
+	rasterizer.rasterizerDiscardEnable = VK_FALSE;
+	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+	rasterizer.lineWidth = 1.0f;
+	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.depthBiasEnable = VK_FALSE;
+	rasterizer.depthBiasConstantFactor = 0.0f;
+	rasterizer.depthBiasClamp = 0.0f;
+	rasterizer.depthBiasSlopeFactor = 0.0f;
+
+	// Multisampling
+	VkPipelineMultisampleStateCreateInfo multisampling{};
+	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisampling.sampleShadingEnable = VK_FALSE;
+	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	multisampling.minSampleShading = 1.0f;
+	multisampling.pSampleMask = nullptr;
+	multisampling.alphaToCoverageEnable = VK_FALSE;
+	multisampling.alphaToOneEnable = VK_FALSE;
+
+	// Depth
+	VkPipelineDepthStencilStateCreateFlagBits depthstencil{};
+}	
 
 bool Renderer::CheckValidationLayerSupport()
 {

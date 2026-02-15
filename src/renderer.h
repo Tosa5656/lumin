@@ -11,6 +11,8 @@
 #include <GLFW/glfw3.h>
 
 #include "window.h"
+#include "shaders.h"
+
 class Window;
 
 static bool is_glfw_inited = false;
@@ -93,6 +95,7 @@ private:
 #endif
 
 	Window* m_window;
+	ShadersManager m_shaders_manager;
 
 	VkInstance m_instance;
 	VkApplicationInfo m_application_info{};
@@ -107,4 +110,6 @@ private:
 	VkFormat m_swapchain_image_format;
 	VkExtent2D m_swapchain_extent;
 	std::vector<VkImageView> m_swapchain_image_views;
+	VkViewport m_viewport;
+	VkRect2D m_scissor;
 };

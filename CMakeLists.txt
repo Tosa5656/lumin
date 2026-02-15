@@ -8,7 +8,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(PROJECT_SOURCES src/main.cpp
 					src/window.cpp
 					src/window_manager.cpp
-					src/renderer.cpp)
+					src/renderer.cpp
+                    src/shaders.cpp)
 
 include(FetchContent)
 
