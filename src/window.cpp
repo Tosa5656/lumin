@@ -41,5 +41,7 @@ bool Window::Update()
 	if (glfwWindowShouldClose(m_window)) return false;
 	glfwPollEvents();
 
+	m_renderer->DrawFrame();
+
 	return true;
 }

@@ -63,13 +63,21 @@ public:
 		vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
 		vkDestroyInstance(m_instance, nullptr);
 		vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
+		for (auto framebuffer : m_framebuffers)
+			vkDestroyFramebuffer(m_device, framebuffer, nullptr);
 		for (auto imageView : m_swapchain_image_views)
         	vkDestroyImageView(m_device, imageView, nullptr);
+		vkDestroyPipeline(m_device, m_pipeline, nullptr);
 		vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
+		vkDestroyRenderPass(m_device, m_render_pass, nullptr);
+		vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
+		vkDestroySemaphore(m_device, m_render_finished_semaphore, nullptr);
+		vkDestroySemaphore(m_device, m_image_available_semaphore, nullptr);
 		vkDestroyDevice(m_device, nullptr);
 	};
 
 	void Init();
+	void DrawFrame();
 private:
 	bool CheckValidationLayerSupport();
 	std::vector<const char*> GetRequiredExtensions();
@@ -114,4 +122,11 @@ private:
 	VkViewport m_viewport;
 	VkRect2D m_scissor;
 	VkPipelineLayout m_pipeline_layout;
+	VkRenderPass m_render_pass;
+	VkPipeline m_pipeline;
+	std::vector<VkFramebuffer> m_framebuffers;
+	VkCommandPool m_cmd_pool;
+	std::vector<VkCommandBuffer> m_cmdbuffers;
+	VkSemaphore m_image_available_semaphore;
+	VkSemaphore m_render_finished_semaphore;
 };
