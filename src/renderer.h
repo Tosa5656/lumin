@@ -71,6 +71,7 @@ public:
 		vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
 		vkDestroyRenderPass(m_device, m_render_pass, nullptr);
 		vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
+		vkDestroyFence(m_device, m_in_flight_fence, nullptr);
 		vkDestroySemaphore(m_device, m_render_finished_semaphore, nullptr);
 		vkDestroySemaphore(m_device, m_image_available_semaphore, nullptr);
 		vkDestroyDevice(m_device, nullptr);
@@ -129,4 +130,5 @@ private:
 	std::vector<VkCommandBuffer> m_cmdbuffers;
 	VkSemaphore m_image_available_semaphore;
 	VkSemaphore m_render_finished_semaphore;
+	VkFence m_in_flight_fence;
 };

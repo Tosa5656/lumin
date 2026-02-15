@@ -266,7 +266,7 @@ void Renderer::Init()
 	// Input Assembly
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 	inputAssembly.primitiveRestartEnable = VK_FALSE;
 
 	// Viewport
@@ -385,15 +385,14 @@ void Renderer::Init()
 	{
 		VkImageView attachments[] = { m_swapchain_image_views[i] };
 
-		Vector2 window_size = m_window->GetSize();
-
 		VkFramebufferCreateInfo framebufferCreateInfo{};
 		framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebufferCreateInfo.renderPass = m_render_pass;
 		framebufferCreateInfo.attachmentCount = 1;
 		framebufferCreateInfo.pAttachments = attachments;
-		framebufferCreateInfo.width = window_size.x;
-		framebufferCreateInfo.height = window_size.y;
+		framebufferCreateInfo.width = m_swapchain_extent.width;
+		framebufferCreateInfo.height = m_swapchain_extent.height;
+		framebufferCreateInfo.layers = 1;
 
 		VkResult framebuffer_result = vkCreateFramebuffer(m_device, &framebufferCreateInfo, nullptr, &m_framebuffers[i]);
 	}
@@ -422,6 +421,9 @@ void Renderer::Init()
 	for (size_t i = 0; i < m_cmdbuffers.size(); i++)
 	{
 		VkCommandBufferBeginInfo cmdBufferBeginInfo{};
+		cmdBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		cmdBufferBeginInfo.pNext = nullptr;
+		cmdBufferBeginInfo.flags = 0;
 
 		VkResult cmd_buffer_result = vkBeginCommandBuffer(m_cmdbuffers[i], &cmdBufferBeginInfo);
 
@@ -447,17 +449,23 @@ void Renderer::Init()
 		VkResult end_cmd_buffer_result = vkEndCommandBuffer(m_cmdbuffers[i]);
 	}
 
-	// Create semaphores
-
+	// Semaphores
 	VkSemaphoreCreateInfo semaphoreCreateInfo{};
 	semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	vkCreateSemaphore(m_device, &semaphoreCreateInfo, nullptr, &m_image_available_semaphore);
+	vkCreateSemaphore(m_device, &semaphoreCreateInfo, nullptr, &m_render_finished_semaphore);
 
-	VkResult image_avaliable_semaphore = vkCreateSemaphore(m_device, &semaphoreCreateInfo, nullptr, &m_image_available_semaphore);
-	VkResult render_finished_semaphore = vkCreateSemaphore(m_device, &semaphoreCreateInfo, nullptr, &m_render_finished_semaphore);
+	VkFenceCreateInfo fenceCreateInfo{};
+	fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+	vkCreateFence(m_device, &fenceCreateInfo, nullptr, &m_in_flight_fence);
 }
 
 void Renderer::DrawFrame()
 {
+	vkWaitForFences(m_device, 1, &m_in_flight_fence, VK_TRUE, UINT64_MAX);
+	vkResetFences(m_device, 1, &m_in_flight_fence);
+
 	uint32_t imageIndex = 0;
 	vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX, m_image_available_semaphore, VK_NULL_HANDLE, &imageIndex);
 
@@ -476,7 +484,7 @@ void Renderer::DrawFrame()
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = signalSemaphores;
 
-	VkResult submit_info_result = vkQueueSubmit(m_graphics_queue, 1, &submitInfo, VK_NULL_HANDLE);
+	VkResult submit_info_result = vkQueueSubmit(m_graphics_queue, 1, &submitInfo, m_in_flight_fence);
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
