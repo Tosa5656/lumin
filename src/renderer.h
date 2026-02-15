@@ -3,6 +3,8 @@
 #include <iostream>
 #include <vector>
 #include <cstring>
+#include <optional>
+#include <set>
 
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
@@ -30,18 +32,35 @@ inline void destroy_glfw()
 	}
 }
 
+struct QueueFamilyIndices
+{
+	std::optional<uint32_t> graphicsFamily;
+	std::optional<uint32_t> presentFamily;
+
+	bool IsComplete()
+	{
+		return graphicsFamily.has_value();
+	}
+};
+
 class Renderer
 {
 public:
 	Renderer() {};
 	Renderer(Window* window);
-	~Renderer() { vkDestroyInstance(m_instance, nullptr); };
+	~Renderer()
+	{
+		vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+		vkDestroyInstance(m_instance, nullptr);
+		vkDestroyDevice(m_device, nullptr);
+	};
 
 	void Init();
 private:
-	bool checkValidationLayerSupport();
-	std::vector<const char*> getRequiredExtensions();
-	bool isDeviceSuitable(VkPhysicalDevice device);
+	bool CheckValidationLayerSupport();
+	std::vector<const char*> GetRequiredExtensions();
+	bool IsDeviceSuitable(VkPhysicalDevice device);
+	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
 
 	const std::vector<const char*> validationLayers = {
 		"VK_LAYER_KHRONOS_validation"
@@ -59,4 +78,8 @@ private:
 	VkApplicationInfo m_application_info{};
 	VkInstanceCreateInfo m_create_info{};
 	VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
+	VkDevice m_device;
+	VkQueue m_graphics_queue;
+	VkQueue m_present_queue;
+	VkSurfaceKHR m_surface;
 };
