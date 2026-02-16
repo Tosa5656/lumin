@@ -7,10 +7,13 @@
 #include <set>
 #include <cstdint>
 #include <array>
+#include <chrono>
 
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+#define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "window.h"
 #include "shaders.h"
@@ -87,6 +90,13 @@ struct Vertex
 	}
 };
 
+struct UniformBufferObject
+{
+	glm::mat4 model;
+	glm::mat4 view;
+	glm::mat4 proj;
+};
+
 const std::vector<Vertex> vertices = {
 	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
 	{{0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
@@ -106,6 +116,8 @@ public:
 	~Renderer()
 	{
 		CleanupSwapChain();
+
+		vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
 
 		vkDestroyBuffer(m_device, m_vertex_buffer, nullptr);
 		vkFreeMemory(m_device, m_vertex_buffer_memory, nullptr);
@@ -141,6 +153,7 @@ private:
 	void CreateSwapChain();
 	void CreateImageViews();
 	void CreateRenderPass();
+	void CreateDescriptorSetLayout();
 	void CreateGraphicsPipeline();
 	void CreateFrameBuffer();
 	void CreateCommandPool();
@@ -148,10 +161,14 @@ private:
 	void CopyBuffer(VkBuffer source_buffer, VkBuffer destionation_buffer, VkDeviceSize size);
 	void CreateVertexBuffer();
 	void CreateIndexBuffer();
+	void CreateUniformBuffers();
+	void CreateDescriptorPool();
+	void CreateDescriptorSets();
 	void CreateCommandBuffers();
 	void CreateSyncObjects();
 
 	void RecreateSwapChain();
+	void UpdateUniformBuffer(uint32_t currentImage);
 
 	void CleanupSwapChain();
 
@@ -204,6 +221,7 @@ private:
 	std::vector<VkImageView> m_swapchain_image_views;
 	VkViewport m_viewport;
 	VkRect2D m_scissor;
+	VkDescriptorSetLayout m_descriptor_set_layout;
 	VkPipelineLayout m_pipeline_layout;
 	VkRenderPass m_render_pass;
 	VkPipeline m_pipeline;
@@ -220,4 +238,8 @@ private:
 	VkDeviceMemory m_vertex_buffer_memory;
 	VkBuffer m_index_buffer;
 	VkDeviceMemory m_index_buffer_memory;
+	std::vector<VkBuffer> m_uniform_buffers;
+	std::vector<VkDeviceMemory> m_uniform_buffers_memory;
+	VkDescriptorPool m_descriptor_pool;
+	std::vector<VkDescriptorSet> m_descriptor_sets;
 };
