@@ -137,6 +137,7 @@ private:
 	void CreateFrameBuffer();
 	void CreateCommandPool();
 	void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
+	void CopyBuffer(VkBuffer source_buffer, VkBuffer destionation_buffer, VkDeviceSize size);
 	void CreateVertexBuffer();
 	void CreateCommandBuffers();
 	void CreateSyncObjects();
