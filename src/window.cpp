@@ -26,11 +26,15 @@ void Window::Init()
 	init_glfw();
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	//glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 	m_window = glfwCreateWindow(m_size.x, m_size.y, m_title.c_str(), nullptr, nullptr);
 	if (!m_window)
 		return;
+
+	glfwSetWindowUserPointer(m_window, this);
+
+	glfwSetFramebufferSizeCallback(m_window, m_framebuffer_resized_callback);
 
 	m_renderer = new Renderer(this);
 	m_renderer->Init();
@@ -44,4 +48,11 @@ bool Window::Update()
 	m_renderer->DrawFrame();
 
 	return true;
+}
+
+// Callbacks
+void Window::m_framebuffer_resized_callback(GLFWwindow* window, int width, int height)
+{
+	auto renderer = reinterpret_cast<Renderer*>(glfwGetWindowUserPointer(window));
+	renderer->SetFramebufferResized(true);
 }

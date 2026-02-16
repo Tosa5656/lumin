@@ -60,29 +60,26 @@ public:
 	Renderer(Window* window);
 	~Renderer()
 	{
-		vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
-		vkDestroyInstance(m_instance, nullptr);
-		vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
-		for (auto framebuffer : m_framebuffers)
-			vkDestroyFramebuffer(m_device, framebuffer, nullptr);
-		for (auto imageView : m_swapchain_image_views)
-        	vkDestroyImageView(m_device, imageView, nullptr);
-		vkDestroyPipeline(m_device, m_pipeline, nullptr);
-		vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
-		vkDestroyRenderPass(m_device, m_render_pass, nullptr);
-		vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
+		CleanupSwapChain();
+
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
 			vkDestroySemaphore(m_device, m_render_finished_semaphores[i], nullptr);
 			vkDestroySemaphore(m_device, m_image_available_semaphores[i], nullptr);
 			vkDestroyFence(m_device, m_in_flight_fence[i], nullptr);
 		}
+
+		vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
 		vkDestroyDevice(m_device, nullptr);
+		vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+		vkDestroyInstance(m_instance, nullptr);
 	};
 
 	void Init();
 	void DrawFrame();
 	void Idle();
+
+	void SetFramebufferResized(bool resized) { m_framebuffer_resized = resized; };
 private:
 	void CreateInstance();
 	void CreateWindowSurface();
@@ -98,6 +95,10 @@ private:
 	void CreateCommandPool();
 	void CreateCommandBuffers();
 	void CreateSyncObjects();
+
+	void RecreateSwapChain();
+
+	void CleanupSwapChain();
 
 	bool CheckValidationLayerSupport();
 	std::vector<const char*> GetRequiredExtensions();
@@ -158,4 +159,5 @@ private:
 	std::vector<VkFence> m_in_flight_fence;
 	std::vector<VkFence> m_images_in_flight;
 	int m_current_frame = 0;
+	bool m_framebuffer_resized = false;
 };

@@ -526,12 +526,60 @@ void Renderer::CreateSyncObjects()
 	}
 }
 
+void Renderer::RecreateSwapChain()
+{
+	int width = 0, height = 0;
+	glfwGetFramebufferSize(m_window->GetNativeWindow(), &width, &height);
+
+	while (width == 0 || height == 0)
+	{
+		glfwGetFramebufferSize(m_window->GetNativeWindow(), &width, &height);
+		glfwWaitEvents();
+	}
+
+	vkDeviceWaitIdle(m_device);
+
+	CleanupSwapChain();
+
+	CreateSwapChain();
+	CreateImageViews();
+	CreateRenderPass();
+	CreateGraphicsPipeline();
+	CreateFrameBuffer();
+	CreateCommandPool();
+	CreateCommandBuffers();
+}
+
+void Renderer::CleanupSwapChain()
+{
+	for (size_t i = 0; i < m_framebuffers.size(); i++) {
+		vkDestroyFramebuffer(m_device, m_framebuffers[i], nullptr);
+	}
+
+	vkFreeCommandBuffers(m_device, m_cmd_pool, static_cast<uint32_t>(m_cmdbuffers.size()), m_cmdbuffers.data());
+
+	vkDestroyPipeline(m_device, m_pipeline, nullptr);
+	vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
+	vkDestroyRenderPass(m_device, m_render_pass, nullptr);
+
+	for (size_t i = 0; i < m_swapchain_image_views.size(); i++) {
+		vkDestroyImageView(m_device, m_swapchain_image_views[i], nullptr);
+	}
+
+	vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
+}
+
 void Renderer::DrawFrame()
 {
 	vkWaitForFences(m_device, 1, &m_in_flight_fence[m_current_frame], VK_TRUE, UINT64_MAX);
 
 	uint32_t imageIndex = 0;
-	vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX, m_image_available_semaphores[m_current_frame], VK_NULL_HANDLE, &imageIndex);
+	VkResult next_image_result = vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX, m_image_available_semaphores[m_current_frame], VK_NULL_HANDLE, &imageIndex);
+	if (next_image_result == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		RecreateSwapChain();
+		return;
+	}
 
 	if (m_images_in_flight[imageIndex] != VK_NULL_HANDLE)
 		vkWaitForFences(m_device, 1, &m_images_in_flight[imageIndex], VK_TRUE, UINT64_MAX);
@@ -566,7 +614,14 @@ void Renderer::DrawFrame()
 	presentInfo.pSwapchains = swapchains;
 	presentInfo.pImageIndices = &imageIndex;
 	presentInfo.pResults = nullptr;
-	vkQueuePresentKHR(m_graphics_queue, &presentInfo);
+	VkResult queue_present = vkQueuePresentKHR(m_graphics_queue, &presentInfo);
+
+	if (queue_present == VK_ERROR_OUT_OF_DATE_KHR || queue_present == VK_SUBOPTIMAL_KHR || m_framebuffer_resized)
+	{
+		m_framebuffer_resized = false;
+		RecreateSwapChain();
+	}
+
 	vkQueueWaitIdle(m_present_queue);
 
 	m_current_frame = (m_current_frame + 1) % MAX_FRAMES_IN_FLIGHT;

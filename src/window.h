@@ -28,6 +28,9 @@ public:
 private:
 	void Init();
 
+	//Callbacks
+	static void m_framebuffer_resized_callback(GLFWwindow* window, int width, int height);
+
 	GLFWwindow* m_window;
 	
 	std::string m_title = "";
