@@ -461,31 +461,37 @@ void Renderer::CreateCommandPool()
 	VkResult command_pool_result = vkCreateCommandPool(m_device, &poolCreateInfo, nullptr, &m_cmd_pool);
 }
 
-void Renderer::CreateVertexBuffer()
+void Renderer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
 {
-	VkBufferCreateInfo vertexBufferCreateInfo{};
-	vertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	vertexBufferCreateInfo.size = sizeof(vertices[0]) * vertices.size();
-	vertexBufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-	vertexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	VkBufferCreateInfo bufferCreateInfo{};
+	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferCreateInfo.size = size;
+	bufferCreateInfo.usage = usage;
+	bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-	VkResult vertex_buffer_result = vkCreateBuffer(m_device, &vertexBufferCreateInfo, nullptr, &m_vertex_buffer);
+	VkResult buffer_result = vkCreateBuffer(m_device, &bufferCreateInfo, nullptr, &buffer);
 
 	VkMemoryRequirements memoryRequirements;
-	vkGetBufferMemoryRequirements(m_device, m_vertex_buffer, &memoryRequirements);
+	vkGetBufferMemoryRequirements(m_device, buffer, &memoryRequirements);
 
 	VkMemoryAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memoryRequirements.size;
-	allocInfo.memoryTypeIndex = FindMemoryType(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	allocInfo.memoryTypeIndex = FindMemoryType(memoryRequirements.memoryTypeBits, properties);
 
-	VkResult allocate_memory_result = vkAllocateMemory(m_device, &allocInfo, nullptr, &m_vertex_buffer_memory);
+	VkResult allocate_memory_result = vkAllocateMemory(m_device, &allocInfo, nullptr, &bufferMemory);
 
-	vkBindBufferMemory(m_device, m_vertex_buffer, m_vertex_buffer_memory, 0);
+	vkBindBufferMemory(m_device, buffer, bufferMemory, 0);
+}
+
+void Renderer::CreateVertexBuffer()
+{
+	VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+	CreateBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_vertex_buffer, m_vertex_buffer_memory);
 
 	void* data;
-	vkMapMemory(m_device, m_vertex_buffer_memory, 0, vertexBufferCreateInfo.size, 0, &data);
-	memcpy(data, vertices.data(), (size_t) vertexBufferCreateInfo.size);
+	vkMapMemory(m_device, m_vertex_buffer_memory, 0, bufferSize, 0, &data);
+	memcpy(data, vertices.data(), (size_t) bufferSize);
 	vkUnmapMemory(m_device, m_vertex_buffer_memory);
 }
 
