@@ -89,8 +89,13 @@ struct Vertex
 
 const std::vector<Vertex> vertices = {
 	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-	{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-	{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+	{{0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+	{{0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
+	{{-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}}
+};
+
+const std::vector<uint16_t> indices = {
+	0, 1, 2, 2, 3, 0
 };
 
 class Renderer
@@ -104,6 +109,9 @@ public:
 
 		vkDestroyBuffer(m_device, m_vertex_buffer, nullptr);
 		vkFreeMemory(m_device, m_vertex_buffer_memory, nullptr);
+
+		vkDestroyBuffer(m_device, m_index_buffer, nullptr);
+		vkFreeMemory(m_device, m_index_buffer_memory, nullptr);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
@@ -139,6 +147,7 @@ private:
 	void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 	void CopyBuffer(VkBuffer source_buffer, VkBuffer destionation_buffer, VkDeviceSize size);
 	void CreateVertexBuffer();
+	void CreateIndexBuffer();
 	void CreateCommandBuffers();
 	void CreateSyncObjects();
 
@@ -209,4 +218,6 @@ private:
 	bool m_framebuffer_resized = false;
 	VkBuffer m_vertex_buffer;
 	VkDeviceMemory m_vertex_buffer_memory;
+	VkBuffer m_index_buffer;
+	VkDeviceMemory m_index_buffer_memory;
 };
