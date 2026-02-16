@@ -24,6 +24,10 @@ void WindowManager::UpdateWindows()
 
 	for (Window* window : m_windows)
 	{
-		if (!window->Update()) RemoveWindow(window);
+		if (!window->Update())
+		{
+			window->GetRenderer()->Idle();
+			RemoveWindow(window);
+		}
 	}
 }

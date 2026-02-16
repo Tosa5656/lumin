@@ -449,30 +449,43 @@ void Renderer::Init()
 		VkResult end_cmd_buffer_result = vkEndCommandBuffer(m_cmdbuffers[i]);
 	}
 
-	// Semaphores
+	// Sync objects
+	m_image_available_semaphores.resize(MAX_FRAMES_IN_FLIGHT);
+	m_render_finished_semaphores.resize(MAX_FRAMES_IN_FLIGHT);
+	m_in_flight_fence.resize(MAX_FRAMES_IN_FLIGHT);
+	m_images_in_flight.resize(m_swapchain_image_views.size(), VK_NULL_HANDLE);
+
 	VkSemaphoreCreateInfo semaphoreCreateInfo{};
 	semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-	vkCreateSemaphore(m_device, &semaphoreCreateInfo, nullptr, &m_image_available_semaphore);
-	vkCreateSemaphore(m_device, &semaphoreCreateInfo, nullptr, &m_render_finished_semaphore);
 
 	VkFenceCreateInfo fenceCreateInfo{};
 	fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-	vkCreateFence(m_device, &fenceCreateInfo, nullptr, &m_in_flight_fence);
+
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		VkResult image_available_result = vkCreateSemaphore(m_device, &semaphoreCreateInfo, nullptr, &m_image_available_semaphores[i]);
+		VkResult render_finished_result = vkCreateSemaphore(m_device, &semaphoreCreateInfo, nullptr, &m_render_finished_semaphores[i]);
+		VkResult fence_result = vkCreateFence(m_device, &fenceCreateInfo, nullptr, &m_in_flight_fence[i]);
+	}
 }
 
 void Renderer::DrawFrame()
 {
-	vkWaitForFences(m_device, 1, &m_in_flight_fence, VK_TRUE, UINT64_MAX);
-	vkResetFences(m_device, 1, &m_in_flight_fence);
+	vkWaitForFences(m_device, 1, &m_in_flight_fence[m_current_frame], VK_TRUE, UINT64_MAX);
 
 	uint32_t imageIndex = 0;
-	vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX, m_image_available_semaphore, VK_NULL_HANDLE, &imageIndex);
+	vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX, m_image_available_semaphores[m_current_frame], VK_NULL_HANDLE, &imageIndex);
+
+	if (m_images_in_flight[imageIndex] != VK_NULL_HANDLE)
+		vkWaitForFences(m_device, 1, &m_images_in_flight[imageIndex], VK_TRUE, UINT64_MAX);
+
+	m_images_in_flight[imageIndex] = m_in_flight_fence[m_current_frame];
 
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-	VkSemaphore waitSemaphores[] = { m_image_available_semaphore };
+	VkSemaphore waitSemaphores[] = { m_image_available_semaphores[m_current_frame] };
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 	submitInfo.waitSemaphoreCount = 1;
 	submitInfo.pWaitSemaphores = waitSemaphores;
@@ -480,11 +493,12 @@ void Renderer::DrawFrame()
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &m_cmdbuffers[imageIndex];
 
-	VkSemaphore signalSemaphores[] = { m_render_finished_semaphore };
+	VkSemaphore signalSemaphores[] = { m_render_finished_semaphores[m_current_frame] };
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = signalSemaphores;
 
-	VkResult submit_info_result = vkQueueSubmit(m_graphics_queue, 1, &submitInfo, m_in_flight_fence);
+	vkResetFences(m_device, 1, &m_in_flight_fence[m_current_frame]);
+	VkResult submit_info_result = vkQueueSubmit(m_graphics_queue, 1, &submitInfo, m_in_flight_fence[m_current_frame]);
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -497,6 +511,14 @@ void Renderer::DrawFrame()
 	presentInfo.pImageIndices = &imageIndex;
 	presentInfo.pResults = nullptr;
 	vkQueuePresentKHR(m_graphics_queue, &presentInfo);
+	vkQueueWaitIdle(m_present_queue);
+
+	m_current_frame = (m_current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
+void Renderer::Idle()
+{
+	vkDeviceWaitIdle(m_device);
 }
 
 bool Renderer::CheckValidationLayerSupport()

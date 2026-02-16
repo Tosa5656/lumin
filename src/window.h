@@ -24,6 +24,7 @@ public:
 	GLFWwindow* GetNativeWindow() { return m_window; }
 	std::string GetTitle() { return m_title; }
 	Vector2 GetSize() { return m_size; }
+	Renderer* GetRenderer() { return m_renderer; }
 private:
 	void Init();
 

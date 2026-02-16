@@ -71,14 +71,18 @@ public:
 		vkDestroyPipelineLayout(m_device, m_pipeline_layout, nullptr);
 		vkDestroyRenderPass(m_device, m_render_pass, nullptr);
 		vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
-		vkDestroyFence(m_device, m_in_flight_fence, nullptr);
-		vkDestroySemaphore(m_device, m_render_finished_semaphore, nullptr);
-		vkDestroySemaphore(m_device, m_image_available_semaphore, nullptr);
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		{
+			vkDestroySemaphore(m_device, m_render_finished_semaphores[i], nullptr);
+			vkDestroySemaphore(m_device, m_image_available_semaphores[i], nullptr);
+			vkDestroyFence(m_device, m_in_flight_fence[i], nullptr);
+		}
 		vkDestroyDevice(m_device, nullptr);
 	};
 
 	void Init();
 	void DrawFrame();
+	void Idle();
 private:
 	bool CheckValidationLayerSupport();
 	std::vector<const char*> GetRequiredExtensions();
@@ -104,6 +108,8 @@ private:
 	const bool enableValidationLayers = true;
 #endif
 
+	const int MAX_FRAMES_IN_FLIGHT = 2;
+
 	Window* m_window;
 	ShadersManager m_shaders_manager;
 
@@ -128,7 +134,9 @@ private:
 	std::vector<VkFramebuffer> m_framebuffers;
 	VkCommandPool m_cmd_pool;
 	std::vector<VkCommandBuffer> m_cmdbuffers;
-	VkSemaphore m_image_available_semaphore;
-	VkSemaphore m_render_finished_semaphore;
-	VkFence m_in_flight_fence;
+	std::vector<VkSemaphore> m_image_available_semaphores;
+	std::vector<VkSemaphore> m_render_finished_semaphores;
+	std::vector<VkFence> m_in_flight_fence;
+	std::vector<VkFence> m_images_in_flight;
+	int m_current_frame = 0;
 };
