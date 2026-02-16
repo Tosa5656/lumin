@@ -19,12 +19,21 @@ FetchContent_Declare(
     GIT_TAG 3.4
     GIT_SHALLOW TRUE
 )
+
+FetchContent_Declare(
+		glm
+		GIT_REPOSITORY https://github.com/g-truc/glm.git
+		GIT_TAG 1.0.1
+		GIT_SHALLOW TRUE
+)
+
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+set(GLM_QUIET ON CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(glfw)
+FetchContent_MakeAvailable(glfw glm)
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 include_directories(${PROJECT_NAME} src/)
@@ -38,7 +47,9 @@ add_custom_command(
 		COMMENT "Compiling shaders..."
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE glfw)
-
 find_package(Vulkan REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
+target_link_libraries(${PROJECT_NAME} PRIVATE
+		glfw
+		glm::glm
+		Vulkan::Vulkan
+)

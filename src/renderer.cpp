@@ -19,6 +19,7 @@ void Renderer::Init()
 	CreateGraphicsPipeline();
 	CreateFrameBuffer();
 	CreateCommandPool();
+	CreateVertexBuffer();
 	CreateCommandBuffers();
 	CreateSyncObjects();
 }
@@ -300,12 +301,15 @@ void Renderer::CreateGraphicsPipeline()
 		fragmentShaderStageInfo
 	};
 
+	auto bindingDescription = Vertex::GetBindingDescription();
+	auto attributeDescriptions = Vertex::GetAttributeDescriptions();
+
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 0;
-	vertexInputInfo.pVertexBindingDescriptions = nullptr;
-	vertexInputInfo.vertexAttributeDescriptionCount = 0;
-	vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+	vertexInputInfo.vertexBindingDescriptionCount = 1;
+	vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+	vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+	vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
 	// Input Assembly
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -457,6 +461,34 @@ void Renderer::CreateCommandPool()
 	VkResult command_pool_result = vkCreateCommandPool(m_device, &poolCreateInfo, nullptr, &m_cmd_pool);
 }
 
+void Renderer::CreateVertexBuffer()
+{
+	VkBufferCreateInfo vertexBufferCreateInfo{};
+	vertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	vertexBufferCreateInfo.size = sizeof(vertices[0]) * vertices.size();
+	vertexBufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	vertexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	VkResult vertex_buffer_result = vkCreateBuffer(m_device, &vertexBufferCreateInfo, nullptr, &m_vertex_buffer);
+
+	VkMemoryRequirements memoryRequirements;
+	vkGetBufferMemoryRequirements(m_device, m_vertex_buffer, &memoryRequirements);
+
+	VkMemoryAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memoryRequirements.size;
+	allocInfo.memoryTypeIndex = FindMemoryType(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	VkResult allocate_memory_result = vkAllocateMemory(m_device, &allocInfo, nullptr, &m_vertex_buffer_memory);
+
+	vkBindBufferMemory(m_device, m_vertex_buffer, m_vertex_buffer_memory, 0);
+
+	void* data;
+	vkMapMemory(m_device, m_vertex_buffer_memory, 0, vertexBufferCreateInfo.size, 0, &data);
+	memcpy(data, vertices.data(), (size_t) vertexBufferCreateInfo.size);
+	vkUnmapMemory(m_device, m_vertex_buffer_memory);
+}
+
 void Renderer::CreateCommandBuffers()
 {
 	// Command buffers
@@ -495,7 +527,11 @@ void Renderer::CreateCommandBuffers()
 
 		vkCmdBindPipeline(m_cmdbuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
 
-		vkCmdDraw(m_cmdbuffers[i], 3, 1, 0, 0);
+		VkBuffer vertexBuffers[] = { m_vertex_buffer };
+		VkDeviceSize offsets[] = { 0 };
+		vkCmdBindVertexBuffers(m_cmdbuffers[i], 0, 1, vertexBuffers, offsets);
+
+		vkCmdDraw(m_cmdbuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 
 		vkCmdEndRenderPass(m_cmdbuffers[i]);
 
@@ -552,7 +588,8 @@ void Renderer::RecreateSwapChain()
 
 void Renderer::CleanupSwapChain()
 {
-	for (size_t i = 0; i < m_framebuffers.size(); i++) {
+	for (size_t i = 0; i < m_framebuffers.size(); i++)
+	{
 		vkDestroyFramebuffer(m_device, m_framebuffers[i], nullptr);
 	}
 
@@ -810,5 +847,17 @@ VkExtent2D Renderer::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabiliti
 		actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
 
 		return actualExtent;
+	}
+}
+
+uint32_t Renderer::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
+{
+	VkPhysicalDeviceMemoryProperties memoryProperties;
+	vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &memoryProperties);
+
+	for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++)
+	{
+		if ((typeFilter & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
+			return i;
 	}
 }
