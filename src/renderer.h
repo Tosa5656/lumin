@@ -84,6 +84,21 @@ public:
 	void DrawFrame();
 	void Idle();
 private:
+	void CreateInstance();
+	void CreateWindowSurface();
+	void SelectPhysicalDevice();
+	void InitQueues();
+	void CreateLogicalDevice();
+	void SaveQueues();
+	void CreateSwapChain();
+	void CreateImageViews();
+	void CreateRenderPass();
+	void CreateGraphicsPipeline();
+	void CreateFrameBuffer();
+	void CreateCommandPool();
+	void CreateCommandBuffers();
+	void CreateSyncObjects();
+
 	bool CheckValidationLayerSupport();
 	std::vector<const char*> GetRequiredExtensions();
 	bool IsDeviceSuitable(VkPhysicalDevice device);
@@ -120,7 +135,11 @@ private:
 	VkDevice m_device;
 	VkQueue m_graphics_queue;
 	VkQueue m_present_queue;
+	std::vector<VkDeviceQueueCreateInfo> m_queue_create_infos;
+	QueueFamilyIndices m_indices;
+	float m_queue_priority = 1.0f;
 	VkSurfaceKHR m_surface;
+	VkSurfaceFormatKHR m_surface_format;
 	VkSwapchainKHR m_swapchain;
 	std::vector<VkImage> m_swapchain_images;
 	VkFormat m_swapchain_image_format;

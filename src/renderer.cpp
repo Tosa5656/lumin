@@ -7,6 +7,24 @@ Renderer::Renderer(Window* window)
 
 void Renderer::Init()
 {
+	CreateInstance();
+	CreateWindowSurface();
+	SelectPhysicalDevice();
+	InitQueues();
+	CreateLogicalDevice();
+	SaveQueues();
+	CreateSwapChain();
+	CreateImageViews();
+	CreateRenderPass();
+	CreateGraphicsPipeline();
+	CreateFrameBuffer();
+	CreateCommandPool();
+	CreateCommandBuffers();
+	CreateSyncObjects();
+}
+
+void Renderer::CreateInstance()
+{
 	// Application info
 	m_application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	m_application_info.pApplicationName = m_window->GetTitle().c_str();
@@ -41,10 +59,16 @@ void Renderer::Init()
 
 	// Creating vulkan instance
 	VkResult result = vkCreateInstance(&m_create_info, nullptr, &m_instance);
+}
 
+void Renderer::CreateWindowSurface()
+{
 	// Creating window surface
 	glfwCreateWindowSurface(m_instance, m_window->GetNativeWindow(), nullptr, &m_surface);
+}
 
+void Renderer::SelectPhysicalDevice()
+{
 	// Get all physical devices and check their valid
 	uint32_t deviceCount = 0;
 	vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr);
@@ -68,35 +92,41 @@ void Renderer::Init()
 	{
 		// Not founded suitable GPU
 	}
+}
 
+void Renderer::InitQueues()
+{
 	// Init queues
-	QueueFamilyIndices indices = FindQueueFamilies(m_physicalDevice);
+	m_indices = FindQueueFamilies(m_physicalDevice);
 
-	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
 	std::set<uint32_t> uniqueQueueFamilies =
 	{
-		indices.graphicsFamily.value(),
-		indices.presentFamily.value()
+		m_indices.graphicsFamily.value(),
+		m_indices.presentFamily.value()
 	};
 
-	float queuePriority = 1.0f;
+	m_queue_create_infos.clear();
+
 	for (uint32_t queueFamily : uniqueQueueFamilies)
 	{
 		VkDeviceQueueCreateInfo queueCreateInfo{};
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queueCreateInfo.queueFamilyIndex = queueFamily;
 		queueCreateInfo.queueCount = 1;
-		queueCreateInfo.pQueuePriorities = &queuePriority;
-		queueCreateInfos.push_back(queueCreateInfo);
+		queueCreateInfo.pQueuePriorities = &m_queue_priority;
+		m_queue_create_infos.push_back(queueCreateInfo);
 	}
+}
 
+void Renderer::CreateLogicalDevice()
+{
 	// Creating logic device
 	VkPhysicalDeviceFeatures deviceFeatures{};
 
 	VkDeviceCreateInfo deviceCreateInfo{};
 	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
-	deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
+	deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(m_queue_create_infos.size());
+	deviceCreateInfo.pQueueCreateInfos = m_queue_create_infos.data();
 	deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
 	deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 	deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
@@ -112,14 +142,21 @@ void Renderer::Init()
 	}
 
 	VkResult logic_result = vkCreateDevice(m_physicalDevice, &deviceCreateInfo, nullptr, &m_device);
+}
 
+void Renderer::SaveQueues()
+{
 	// Save created queues
-	vkGetDeviceQueue(m_device, indices.graphicsFamily.value(), 0, &m_graphics_queue);
-	vkGetDeviceQueue(m_device, indices.presentFamily.value(), 0, &m_present_queue);
+	vkGetDeviceQueue(m_device, m_indices.graphicsFamily.value(), 0, &m_graphics_queue);
+	vkGetDeviceQueue(m_device, m_indices.presentFamily.value(), 0, &m_present_queue);
 
+}
+
+void Renderer::CreateSwapChain()
+{
 	// Creating swap chain
 	SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(m_physicalDevice);
-	VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(swapChainSupport.formats);
+	m_surface_format = ChooseSwapSurfaceFormat(swapChainSupport.formats);
 	VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapChainSupport.presentModes);
 	VkExtent2D extent = ChooseSwapExtent(swapChainSupport.capabilities);
 
@@ -127,18 +164,18 @@ void Renderer::Init()
 	if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount)
 		imageCount = swapChainSupport.capabilities.maxImageCount;
 
-	VkSwapchainCreateInfoKHR swapChainCreateInfo = {};
+	VkSwapchainCreateInfoKHR swapChainCreateInfo{};
 	swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	swapChainCreateInfo.surface = m_surface;
 	swapChainCreateInfo.minImageCount = imageCount;
-	swapChainCreateInfo.imageFormat = surfaceFormat.format;
+	swapChainCreateInfo.imageFormat = m_surface_format.format;
 	swapChainCreateInfo.imageExtent = extent;
 	swapChainCreateInfo.imageArrayLayers = 1;
 	swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-	uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value()};	
+	uint32_t queueFamilyIndices[] = { m_indices.graphicsFamily.value(), m_indices.presentFamily.value()};
 
-	if(indices.graphicsFamily != indices.presentFamily)
+	if(m_indices.graphicsFamily != m_indices.presentFamily)
 	{
 		swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 		swapChainCreateInfo.queueFamilyIndexCount = 2;
@@ -161,15 +198,18 @@ void Renderer::Init()
 	m_swapchain_images.resize(imageCount);
 	vkGetSwapchainImagesKHR(m_device, m_swapchain, &imageCount, m_swapchain_images.data());
 
-	m_swapchain_image_format = surfaceFormat.format;
+	m_swapchain_image_format = m_surface_format.format;
 	m_swapchain_extent = extent;
+}
 
+void Renderer::CreateImageViews()
+{
 	// Creating image views
 	m_swapchain_image_views.resize(m_swapchain_images.size());
 
 	for(size_t i = 0; i < m_swapchain_images.size(); i++)
 	{
-		VkImageViewCreateInfo imageViewCreateInfo;
+		VkImageViewCreateInfo imageViewCreateInfo{};
 		imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		imageViewCreateInfo.image = m_swapchain_images[i];
 
@@ -188,12 +228,14 @@ void Renderer::Init()
 		imageViewCreateInfo.subresourceRange.layerCount = 1;
 
 		vkCreateImageView(m_device, &imageViewCreateInfo, nullptr, &m_swapchain_image_views[i]);
-
 	}
+}
 
+void Renderer::CreateRenderPass()
+{
 	// RenderPass
 	VkAttachmentDescription colorAttachment = {};
-	colorAttachment.format = surfaceFormat.format;
+	colorAttachment.format = m_surface_format.format;
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -229,8 +271,10 @@ void Renderer::Init()
 	renderPassCreateInfo.pDependencies = &dependency;
 
 	VkResult render_pass_result = vkCreateRenderPass(m_device, &renderPassCreateInfo, nullptr, &m_render_pass);
+}
 
-
+void Renderer::CreateGraphicsPipeline()
+{
 	// Creating graphics pipeline
 	m_shaders_manager = ShadersManager(&m_device);
 	auto vertexShaderCode = m_shaders_manager.ReadShader("shaders/default_vert.spv");
@@ -377,7 +421,10 @@ void Renderer::Init()
 	pipelineCreateInfo.basePipelineIndex = -1;
 
 	VkResult pipeline_result = vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &m_pipeline);
+}
 
+void Renderer::CreateFrameBuffer()
+{
 	// Framebuffers
 	m_framebuffers.resize(m_swapchain_image_views.size());
 
@@ -396,16 +443,22 @@ void Renderer::Init()
 
 		VkResult framebuffer_result = vkCreateFramebuffer(m_device, &framebufferCreateInfo, nullptr, &m_framebuffers[i]);
 	}
+}
 
+void Renderer::CreateCommandPool()
+{
 	// Command pool
 
 	VkCommandPoolCreateInfo poolCreateInfo{};
 	poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	poolCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
+	poolCreateInfo.queueFamilyIndex = m_indices.graphicsFamily.value();
 	poolCreateInfo.flags = 0;
 
 	VkResult command_pool_result = vkCreateCommandPool(m_device, &poolCreateInfo, nullptr, &m_cmd_pool);
+}
 
+void Renderer::CreateCommandBuffers()
+{
 	// Command buffers
 
 	m_cmdbuffers.resize(m_framebuffers.size());
@@ -448,7 +501,10 @@ void Renderer::Init()
 
 		VkResult end_cmd_buffer_result = vkEndCommandBuffer(m_cmdbuffers[i]);
 	}
+}
 
+void Renderer::CreateSyncObjects()
+{
 	// Sync objects
 	m_image_available_semaphores.resize(MAX_FRAMES_IN_FLIGHT);
 	m_render_finished_semaphores.resize(MAX_FRAMES_IN_FLIGHT);
