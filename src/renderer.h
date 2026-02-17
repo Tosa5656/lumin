@@ -14,6 +14,7 @@
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <stb_image.h>
 
 #include "window.h"
 #include "shaders.h"
@@ -97,7 +98,7 @@ struct UniformBufferObject
 	alignas(16) glm::mat4 proj;
 };
 
-const std::vector<Vertex> vertices = {
+inline std::vector<Vertex> vertices = {
 	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
 	{{0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
 	{{0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},

@@ -9,7 +9,8 @@ set(PROJECT_SOURCES src/main.cpp
 					src/window.cpp
 					src/window_manager.cpp
 					src/renderer.cpp
-                    src/shaders.cpp)
+                    src/shaders.cpp
+					src/stb_image.cpp)
 
 include(FetchContent)
 
