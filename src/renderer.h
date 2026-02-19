@@ -120,12 +120,6 @@ public:
 
 		vkDestroyDescriptorSetLayout(m_device, m_descriptor_set_layout, nullptr);
 
-		vkDestroyBuffer(m_device, m_vertex_buffer, nullptr);
-		vkFreeMemory(m_device, m_vertex_buffer_memory, nullptr);
-
-		vkDestroyBuffer(m_device, m_index_buffer, nullptr);
-		vkFreeMemory(m_device, m_index_buffer_memory, nullptr);
-
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
 			vkDestroySemaphore(m_device, m_render_finished_semaphores[i], nullptr);
@@ -160,8 +154,8 @@ private:
 	void CreateCommandPool();
 	void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 	void CopyBuffer(VkBuffer source_buffer, VkBuffer destionation_buffer, VkDeviceSize size);
-	void CreateVertexBuffer();
-	void CreateIndexBuffer();
+	void CreateVertexBuffers();
+	void CreateIndexBuffers();
 	void CreateUniformBuffers();
 	void CreateDescriptorPool();
 	void CreateDescriptorSets();
@@ -169,6 +163,8 @@ private:
 	void CreateSyncObjects();
 
 	void RecreateSwapChain();
+	void UpdateVertexBuffer(uint32_t currentImage);
+	void UpdateIndexBuffer(uint32_t currentImage);
 	void UpdateUniformBuffer(uint32_t currentImage);
 
 	void CleanupSwapChain();
@@ -198,7 +194,7 @@ private:
 	const bool enableValidationLayers = true;
 #endif
 
-	const int MAX_FRAMES_IN_FLIGHT = 2;
+	const int MAX_FRAMES_IN_FLIGHT = 3;
 
 	Window* m_window;
 	ShadersManager m_shaders_manager;
@@ -235,12 +231,15 @@ private:
 	std::vector<VkFence> m_images_in_flight;
 	int m_current_frame = 0;
 	bool m_framebuffer_resized = false;
-	VkBuffer m_vertex_buffer;
-	VkDeviceMemory m_vertex_buffer_memory;
-	VkBuffer m_index_buffer;
-	VkDeviceMemory m_index_buffer_memory;
+	std::vector<VkBuffer> m_vertex_buffers;
+	std::vector<VkDeviceMemory> m_vertex_buffers_memory;
+	std::vector<void*> m_vertex_buffers_mapped;
+	std::vector<VkBuffer> m_index_buffers;
+	std::vector<VkDeviceMemory> m_index_buffers_memory;
+	std::vector<void*> m_index_buffers_mapped;
 	std::vector<VkBuffer> m_uniform_buffers;
 	std::vector<VkDeviceMemory> m_uniform_buffers_memory;
+	std::vector<void*> m_uniform_buffers_mapped;
 	VkDescriptorPool m_descriptor_pool;
 	std::vector<VkDescriptorSet> m_descriptor_sets;
 };

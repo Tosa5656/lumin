@@ -23,8 +23,8 @@ void Renderer::Init()
 	CreateUniformBuffers();
 	CreateDescriptorPool();
 	CreateDescriptorSets();
-	CreateVertexBuffer();
-	CreateIndexBuffer();
+	CreateVertexBuffers();
+	CreateIndexBuffers();
 	CreateCommandBuffers();
 	CreateSyncObjects();
 }
@@ -575,45 +575,34 @@ void Renderer::CopyBuffer(VkBuffer source_buffer, VkBuffer destionation_buffer, 
 	vkFreeCommandBuffers(m_device, m_cmd_pool, 1, &commandBuffer);
 }
 
-void Renderer::CreateVertexBuffer()
+void Renderer::CreateVertexBuffers()
 {
 	VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingBufferMemory;
-	CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+	m_vertex_buffers.resize(m_swapchain_images.size());
+	m_vertex_buffers_memory.resize(m_swapchain_images.size());
+	m_vertex_buffers_mapped.resize(m_swapchain_images.size());
 
-	void* data;
-	vkMapMemory(m_device, stagingBufferMemory, 0, bufferSize, 0, &data);
-	memcpy(data, vertices.data(), (size_t) bufferSize);
-	vkUnmapMemory(m_device, stagingBufferMemory);
-
-	CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_vertex_buffer, m_vertex_buffer_memory);
-	CopyBuffer(stagingBuffer, m_vertex_buffer, bufferSize);
-
-	vkDestroyBuffer(m_device, stagingBuffer, nullptr);
-	vkFreeMemory(m_device, stagingBufferMemory, nullptr);
+	for (size_t i = 0; i < m_swapchain_images.size(); i++)
+	{
+		CreateBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_vertex_buffers[i], m_vertex_buffers_memory[i]);
+		vkMapMemory(m_device, m_vertex_buffers_memory[i], 0, bufferSize, 0, &m_vertex_buffers_mapped[i]);
+	}
 }
 
-void Renderer::CreateIndexBuffer()
+void Renderer::CreateIndexBuffers()
 {
 	VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingBufferMemory;
-	CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+	m_index_buffers.resize(m_swapchain_images.size());
+	m_index_buffers_memory.resize(m_swapchain_images.size());
+	m_index_buffers_mapped.resize(m_swapchain_images.size());
 
-	void* data;
-	vkMapMemory(m_device, stagingBufferMemory, 0, bufferSize, 0, &data);
-	memcpy(data, indices.data(), (size_t) bufferSize);
-	vkUnmapMemory(m_device, stagingBufferMemory);
-
-	CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_index_buffer, m_index_buffer_memory);
-
-	CopyBuffer(stagingBuffer, m_index_buffer, bufferSize);
-
-	vkDestroyBuffer(m_device, stagingBuffer, nullptr);
-	vkFreeMemory(m_device, stagingBufferMemory, nullptr);
+	for (size_t i = 0; i < m_swapchain_images.size(); i++)
+	{
+		CreateBuffer(bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_index_buffers[i], m_index_buffers_memory[i]);
+		vkMapMemory(m_device, m_index_buffers_memory[i], 0, bufferSize, 0, &m_index_buffers_mapped[i]);
+	}
 }
 
 void Renderer::CreateUniformBuffers()
@@ -622,10 +611,12 @@ void Renderer::CreateUniformBuffers()
 
 	m_uniform_buffers.resize(m_swapchain_images.size());
 	m_uniform_buffers_memory.resize(m_swapchain_images.size());
+	m_uniform_buffers_mapped.resize(m_swapchain_images.size());
 
 	for (size_t i = 0; i < m_swapchain_images.size(); i++)
 	{
 		CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_uniform_buffers[i], m_uniform_buffers_memory[i]);
+		vkMapMemory(m_device, m_uniform_buffers_memory[i], 0, bufferSize, 0, &m_uniform_buffers_mapped[i]);
 	}
 }
 
@@ -682,11 +673,11 @@ void Renderer::CreateCommandBuffers()
 
 		vkCmdBindPipeline(m_cmdbuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
 
-		VkBuffer vertexBuffers[] = { m_vertex_buffer };
+		VkBuffer vertexBuffers[] = { m_vertex_buffers[i] };
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(m_cmdbuffers[i], 0, 1, vertexBuffers, offsets);
 
-		vkCmdBindIndexBuffer(m_cmdbuffers[i], m_index_buffer, 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindIndexBuffer(m_cmdbuffers[i], m_index_buffers[i], 0, VK_INDEX_TYPE_UINT16);
 		vkCmdBindDescriptorSets(m_cmdbuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline_layout, 0, 1, &m_descriptor_sets[i], 0, nullptr);
 		vkCmdDrawIndexed(m_cmdbuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
@@ -740,10 +731,22 @@ void Renderer::RecreateSwapChain()
 	CreateGraphicsPipeline();
 	CreateFrameBuffer();
 	CreateCommandPool();
+	CreateVertexBuffers();
+	CreateIndexBuffers();
 	CreateUniformBuffers();
 	CreateDescriptorPool();
 	CreateDescriptorSets();
 	CreateCommandBuffers();
+}
+
+void Renderer::UpdateVertexBuffer(uint32_t currentImage)
+{
+	memcpy(m_vertex_buffers_mapped[currentImage], vertices.data(), sizeof(vertices[0]) * vertices.size());
+}
+
+void Renderer::UpdateIndexBuffer(uint32_t currentImage)
+{
+	memcpy(m_index_buffers_mapped[currentImage], indices.data(), sizeof(indices[0]) * indices.size());
 }
 
 void Renderer::UpdateUniformBuffer(uint32_t currentImage)
@@ -759,10 +762,7 @@ void Renderer::UpdateUniformBuffer(uint32_t currentImage)
 	ubo.proj = glm::perspective(glm::radians(45.0f), m_swapchain_extent.width / (float) m_swapchain_extent.height, 0.1f, 10.0f);
 	ubo.proj[1][1] *= -1;
 
-	void* data;
-	vkMapMemory(m_device, m_uniform_buffers_memory[currentImage], 0, sizeof(ubo), 0, &data);
-	memcpy(data, &ubo, sizeof(ubo));
-	vkUnmapMemory(m_device, m_uniform_buffers_memory[currentImage]);
+	memcpy(m_uniform_buffers_mapped[currentImage], &ubo, sizeof(ubo));
 }
 
 void Renderer::CleanupSwapChain()
@@ -779,14 +779,20 @@ void Renderer::CleanupSwapChain()
 	vkDestroyRenderPass(m_device, m_render_pass, nullptr);
 
 	for (size_t i = 0; i < m_swapchain_image_views.size(); i++)
-		{
+	{
 		vkDestroyImageView(m_device, m_swapchain_image_views[i], nullptr);
 	}
 
 	vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
 
 	for (size_t i = 0; i < m_swapchain_images.size(); i++)
-		{
+	{
+		vkDestroyBuffer(m_device, m_vertex_buffers[i], nullptr);
+		vkFreeMemory(m_device, m_vertex_buffers_memory[i], nullptr);
+
+		vkDestroyBuffer(m_device, m_index_buffers[i], nullptr);
+		vkFreeMemory(m_device, m_index_buffers_memory[i], nullptr);
+
 		vkDestroyBuffer(m_device, m_uniform_buffers[i], nullptr);
 		vkFreeMemory(m_device, m_uniform_buffers_memory[i], nullptr);
 	}
@@ -811,6 +817,8 @@ void Renderer::DrawFrame()
 
 	m_images_in_flight[imageIndex] = m_in_flight_fence[m_current_frame];
 
+	UpdateVertexBuffer(imageIndex);
+	UpdateIndexBuffer(imageIndex);
 	UpdateUniformBuffer(imageIndex);
 
 	VkSubmitInfo submitInfo{};
@@ -848,8 +856,6 @@ void Renderer::DrawFrame()
 		m_framebuffer_resized = false;
 		RecreateSwapChain();
 	}
-
-	vkQueueWaitIdle(m_present_queue);
 
 	m_current_frame = (m_current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
