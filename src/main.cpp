@@ -4,32 +4,20 @@
 
 int main()
 {
-    GLFWwindow* window;
+    Window window("Lumin Engine", 800, 600);
+    Window window2("Lumin Engine", 800, 600);
 
-    if (!glfwInit())
-        return -1;
+    WindowManager::AddWindow(&window);
+    WindowManager::AddWindow(&window2);
 
-    window = glfwCreateWindow(640, 480, "Hello World", NULL, NULL);
-    if (!window)
+    bool is_working = true;
+    WindowManager::SetSpectator(&is_working);
+
+    while(is_working)
     {
-        glfwTerminate();
-        return -1;
+        WindowManager::UpdateWindows();
     }
 
-    glfwMakeContextCurrent(window);
-
-    int version = gladLoadGL(glfwGetProcAddress);
-
-    while (!glfwWindowShouldClose(window))
-    {
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        glClearColor(0.5f, 0.1f, 0.1f, 1.0f);
-
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-    }
-
-    glfwTerminate();
+    DestroyGLFW();
     return 0;
 }
