@@ -3,8 +3,14 @@ cmake_minimum_required(VERSION 3.20)
 set(PROJECT_NAME lumin)
 project(${PROJECT_NAME})
 
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 set(PROJECT_SOURCES src/main.cpp
-					src/window.cpp)
+					src/window.cpp
+					src/renderer.cpp
+					src/shaders.cpp)
 
 include(FetchContent)
 
@@ -31,7 +37,7 @@ set(GLM_QUIET ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(glfw glm)
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
-include_directories(${PROJECT_NAME} include/)
+include_directories(${PROJECT_NAME} src/)
 
 add_subdirectory(glad/)
 
