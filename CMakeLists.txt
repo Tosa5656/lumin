@@ -51,6 +51,6 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND ${CMAKE_COMMAND}
 		-DSRC="${CMAKE_SOURCE_DIR}/resources"
 		-DDST="$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-		-P "${CMAKE_SOURCE_DIR}/copy_res.cmake"
+		-P "${CMAKE_SOURCE_DIR}/cmake/copy_resources.cmake"
 		COMMENT "Copying resources content safely"
 )
