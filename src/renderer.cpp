@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include <cmath>
 
 GLfloat vertices[] = {
     0.5f,  0.5f, 0.0f,
@@ -53,6 +54,13 @@ void Renderer::Destroy()
 
 void Renderer::Render()
 {
+    GLfloat timeValue = glfwGetTime();
+    GLfloat redValue = (cos(timeValue) / 3) + 0.3;
+    GLfloat greenValue = (sin(timeValue) / 2) + 0.5;
+    GLint vertexColorLocation = glGetUniformLocation(m_shader_program, "color");
+    glUseProgram(m_shader_program);
+    glUniform4f(vertexColorLocation, redValue, greenValue, 0.25f, 1.0f);
+
     glUseProgram(m_shader_program);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
