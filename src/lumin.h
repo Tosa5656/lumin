@@ -5,5 +5,6 @@
 
 #include "renderer.h"
 #include "window.h"
-
+#include "shaders.h"
 #include "vectors.h"
+#include "colors.h"
