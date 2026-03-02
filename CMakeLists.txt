@@ -46,3 +46,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     glad
 	glm::glm
 )
+
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_COMMAND}
+		-DSRC="${CMAKE_SOURCE_DIR}/resources"
+		-DDST="$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+		-P "${CMAKE_SOURCE_DIR}/copy_res.cmake"
+		COMMENT "Copying resources content safely"
+)
