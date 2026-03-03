@@ -11,6 +11,9 @@ int main()
     bool is_working = true;
     WindowManager::SetSpectator(&is_working);
 
+    Color white = Color::FromHex(0xFF5733);
+    std::cout << white.r << " " << white.g << " " << white.b << " " << white.a << std::endl;
+
     while(is_working)
     {
         WindowManager::UpdateWindows();
