@@ -1,0 +1,27 @@
+all: kernel
+
+AS = nasm
+CC = x86_64-pc-linux-gnu-gcc
+LD = x86_64-pc-linux-gnu-gcc
+CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zone
+
+clean:
+	rm -rf bin obj os.bin
+
+mkdirs:
+	mkdir -p bin obj
+
+bootloader: mkdirs
+	${AS} -f bin arch/x86_64/bootloader.asm -o bin/bootloader.bin
+
+kernel: mkdirs bootloader
+	${AS} -f elf64 kernel/kernel_entry.asm -o obj/kernel_entry.o
+	${CC} ${CFLAGS} -c kernel/kernel.c -o obj/kernel.o
+	${CC} ${CFLAGS} -c kernel/drivers/vga/vga.c -o obj/vga.o
+	${LD} -m64 -nostdlib -Wl,-Ttext,0x100000,--oformat,binary obj/kernel_entry.o obj/kernel.o obj/vga.o -o bin/kernel.bin
+	truncate -s 5120 bin/kernel.bin
+
+	cat bin/bootloader.bin bin/kernel.bin > os.bin
+
+qemu: kernel
+	qemu-system-x86_64 os.bin
