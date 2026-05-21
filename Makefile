@@ -16,9 +16,12 @@ bootloader: mkdirs
 
 kernel: mkdirs bootloader
 	${AS} -f elf64 kernel/kernel_entry.asm -o obj/kernel_entry.o
+	${AS} -f elf64 kernel/interrupts.asm -o obj/interrupts.o
 	${CC} ${CFLAGS} -c kernel/kernel.c -o obj/kernel.o
 	${CC} ${CFLAGS} -c kernel/drivers/vga/vga.c -o obj/vga.o
-	${LD} -m64 -nostdlib -Wl,-Ttext,0x100000,--oformat,binary obj/kernel_entry.o obj/kernel.o obj/vga.o -o bin/kernel.bin
+	${CC} ${CFLAGS} -c kernel/idt.c -o obj/idt.o
+	${CC} ${CFLAGS} -c kernel/keyboard.c -o obj/keyboard.o
+	${LD} -m64 -nostdlib -Wl,-Ttext,0x100000,--oformat,binary obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/idt.o obj/keyboard.o -o bin/kernel.bin
 	truncate -s 5120 bin/kernel.bin
 
 	cat bin/bootloader.bin bin/kernel.bin > os.bin
