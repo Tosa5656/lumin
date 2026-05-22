@@ -10,6 +10,7 @@
 #include "block/block.h"
 #include "fs/vfs.h"
 #include "fs/fat32.h"
+#include "acpi.h"
 
 unsigned char keyboard_color;
 
@@ -22,6 +23,10 @@ static const char *timer_name(enum timer_type t)
         case TIMER_LAPIC: return "LAPIC";
         default:          return "NONE";
     }
+}
+
+void Quit(void) {
+    acpi_shutdown();
 }
 
 void kmain(void)
@@ -191,7 +196,7 @@ void kmain(void)
         serial_write("  unlink FAIL\n");
 
     vga_write("Hello World!", vga_entry_color(VGA_WHITE, VGA_BLACK));
-
+    
     while (1)
     {
         timer_sleep(1000);
@@ -210,4 +215,6 @@ void kmain(void)
         tb[i] = '\0';
         vga_write(tb, row_color);
     }
+
+    Quit();
 }

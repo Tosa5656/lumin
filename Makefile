@@ -30,6 +30,7 @@ kernel: mkdirs bootloader
 	${CC} ${CFLAGS} -c kernel/drivers/serial/serial.c -o obj/serial.o
 	${CC} ${CFLAGS} -c kernel/drivers/rtc/rtc.c -o obj/rtc.o
 	${CC} ${CFLAGS} -c kernel/panic.c -o obj/panic.o
+	${CC} ${CFLAGS} -c kernel/acpi.c -o obj/acpi.o
 	${CC} ${CFLAGS} -c kernel/idt.c -o obj/idt.o
 	${CC} ${CFLAGS} -c kernel/keyboard.c -o obj/keyboard.o
 	${CC} ${CFLAGS} -c kernel/mm/pmm.c -o obj/pmm.o
@@ -39,7 +40,7 @@ kernel: mkdirs bootloader
 	${CC} ${CFLAGS} -c kernel/block/block.c -o obj/block.o
 	${CC} ${CFLAGS} -c kernel/fs/vfs.c -o obj/vfs.o
 	${CC} ${CFLAGS} -c kernel/fs/fat32.c -o obj/fat32.o
-	${LD} ${LDFLAGS} obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/kprintf.o obj/serial.o obj/rtc.o obj/panic.o obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o obj/idt.o obj/keyboard.o obj/pmm.o obj/kmalloc.o obj/pci.o obj/ata.o obj/block.o obj/vfs.o obj/fat32.o -o bin/kernel.bin
+	${LD} ${LDFLAGS} obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/kprintf.o obj/serial.o obj/rtc.o obj/panic.o obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o obj/acpi.o obj/idt.o obj/keyboard.o obj/pmm.o obj/kmalloc.o obj/pci.o obj/ata.o obj/block.o obj/vfs.o obj/fat32.o -o bin/kernel.bin
 	${TRUNCATE} -s 48640 bin/kernel.bin
 
 	${CAT} bin/bootloader.bin bin/kernel.bin > lumin.bin
