@@ -6,6 +6,7 @@
 #include "mm/pmm.h"
 #include "mm/kmalloc.h"
 #include "drivers/pci/pci.h"
+#include "drivers/ata/ata.h"
 
 unsigned char keyboard_color;
 
@@ -43,7 +44,7 @@ void kmain(void)
     vga_write(timer_name(timer_get_type()), green);
     serial_printf("Timer: %s\n", timer_name(timer_get_type()));
 
-    pmm_init(0x104000, 0x200000);
+    pmm_init(0x110000, 0x200000);
     serial_printf("PMM: %d free pages\n", pmm_free_count());
     kmalloc_init();
 
@@ -58,6 +59,24 @@ void kmain(void)
     vga_printf("\nRTC: %04d-%02d-%02d %02d:%02d:%02d",
                tm.year, tm.month, tm.day,
                tm.hour, tm.minute, tm.second);
+
+    int ata_count = ata_init();
+    serial_printf("ATA: %d device(s) found\n", ata_count);
+
+    if (ata_count > 0)
+    {
+        struct ata_device *dev = ata_get_device(0);
+        if (dev)
+        {
+            serial_printf("ATA: model=%s, sectors=%llu, lba48=%d\n",
+                          dev->model, (unsigned long long)dev->sectors, dev->lba48);
+
+            uint8_t mbr[512];
+            if (ata_read_sectors(dev, 0, 1, mbr) == 0)
+                serial_printf("ATA: MBR read OK, boot sig=0x%02x%02x\n",
+                              mbr[0x1FF], mbr[0x1FE]);
+        }
+    }
 
     unsigned char cyan = vga_entry_color(VGA_CYAN, VGA_BLACK);
     int count = 0;
