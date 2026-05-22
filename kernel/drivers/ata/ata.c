@@ -1,13 +1,34 @@
 #include "ata.h"
 #include "../../ports.h"
 #include "../serial/serial.h"
+#include "../../block/block.h"
+#include "../../kprintf.h"
 #include <stddef.h>
 
 #define TIMEOUT_NS  10000000
 #define MAX_DEVICES 4
 
 static struct ata_device devices[MAX_DEVICES];
-static int              device_count;
+static struct block_device ata_block_devs[MAX_DEVICES];
+static struct block_ops   ata_block_ops;
+static int                device_count;
+
+static int ata_block_read(struct block_device *bdev, uint64_t sector, uint8_t count, void *buf)
+{
+    struct ata_device *dev = (struct ata_device *)bdev->private;
+    return ata_read_sectors(dev, sector, count, buf);
+}
+
+static int ata_block_write(struct block_device *bdev, uint64_t sector, uint8_t count, const void *buf)
+{
+    struct ata_device *dev = (struct ata_device *)bdev->private;
+    return ata_write_sectors(dev, sector, count, buf);
+}
+
+static struct block_ops ata_block_ops = {
+    .read  = ata_block_read,
+    .write = ata_block_write,
+};
 
 static uint16_t reg_data(int bus)         { return bus; }
 static uint16_t reg_error(int bus)        { return bus + 1; }
@@ -339,6 +360,9 @@ int ata_init(void)
     device_count = 0;
     int idx = 0;
 
+    ata_block_ops.read  = ata_block_read;
+    ata_block_ops.write = ata_block_write;
+
     for (int bus = 0; bus < 2; bus++)
     {
         for (int drv = 0; drv < 2; drv++)
@@ -364,6 +388,23 @@ int ata_init(void)
                     serial_printf(" [%s] %s, %llu sectors",
                                   typestr, dev->model,
                                   (unsigned long long)dev->sectors);
+
+                    if (dev->sectors > 0)
+                    {
+                        struct block_device *bdev = &ata_block_devs[idx];
+                        int n = ksnprintf(bdev->name, sizeof(bdev->name), "ata%c%c",
+                                          (bus == ATA_BUS_PRIMARY) ? 'a' : 'b',
+                                          (drv == ATA_MASTER) ? 'm' : 's');
+                        (void)n;
+                        bdev->sector_count = dev->sectors;
+                        bdev->sector_size  = 512;
+                        bdev->ops          = &ata_block_ops;
+                        bdev->private      = dev;
+                        bdev->registered   = 0;
+
+                        if (block_register(bdev) == 0)
+                            serial_printf(" -> registered as %s\n", bdev->name);
+                    }
                 }
                 serial_write("\n");
                 device_count++;
