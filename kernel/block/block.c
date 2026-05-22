@@ -4,6 +4,9 @@
 static struct block_device *devices[BLOCK_MAX_DEVS];
 static int device_count;
 
+static struct partition stored_parts[BLOCK_MAX_PARTS];
+static int stored_part_count;
+
 static int part_read(struct block_device *dev, uint64_t sector, uint8_t count, void *buf)
 {
     struct partition *part = (struct partition *)dev->private;
@@ -151,4 +154,54 @@ int block_parse_mbr(struct block_device *dev, struct partition *parts, int max_p
     }
 
     return count;
+}
+
+int block_register_partitions(struct block_device *dev)
+{
+    stored_part_count = 0;
+
+    struct partition parts[BLOCK_MAX_PARTS];
+    int n = block_parse_mbr(dev, parts, BLOCK_MAX_PARTS);
+    if (n <= 0)
+        return 0;
+
+    for (int i = 0; i < n && stored_part_count < BLOCK_MAX_PARTS; i++)
+    {
+        __builtin_memcpy(&stored_parts[stored_part_count], &parts[i], sizeof(struct partition));
+
+        struct partition *part = &stored_parts[stored_part_count];
+        part->dev.private = part;
+
+        int nlen;
+        for (nlen = 0; parts[i].parent->name[nlen] && nlen < BLOCK_NAME_MAX - 3; nlen++)
+            part->dev.name[nlen] = parts[i].parent->name[nlen];
+        part->dev.name[nlen++] = 'p';
+        part->dev.name[nlen++] = '0' + parts[i].index;
+        part->dev.name[nlen] = '\0';
+
+        part->dev.sector_count = part->sector_count;
+        part->dev.sector_size  = part->parent->sector_size;
+        part->dev.registered   = 0;
+
+        if (block_register(&part->dev) == 0)
+            serial_printf("  part%d (type=0x%02x, LBA=%llu) registered as %s\n",
+                          part->index, part->type,
+                          (unsigned long long)part->start_lba, part->dev.name);
+
+        stored_part_count++;
+    }
+
+    return stored_part_count;
+}
+
+int block_partition_count(void)
+{
+    return stored_part_count;
+}
+
+struct block_device *block_partition_get(int index)
+{
+    if (index < 0 || index >= stored_part_count)
+        return NULL;
+    return &stored_parts[index].dev;
 }

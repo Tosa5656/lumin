@@ -7,7 +7,7 @@ _start:
     mov es, ax
 
     mov ah, 0x02
-    mov al, 60
+    mov al, 95
     mov ch, 0
     mov cl, 2
     mov dh, 0
@@ -31,7 +31,7 @@ init_pm:
 
     mov esi, 0x8000
     mov edi, 0x100000
-    mov ecx, 7680
+    mov ecx, 12160
     rep movsd
 
     mov edi, 0x1000
@@ -52,6 +52,16 @@ init_pm:
     add edi, 8
     add ebx, 4096
     loop .set_entry
+
+    mov dword [0x3008], 0x5003
+    mov edi, 0x5000
+    mov ebx, 0x00200003
+    mov ecx, 512
+.set_entry2:
+    mov [edi], ebx
+    add edi, 8
+    add ebx, 4096
+    loop .set_entry2
 
     mov eax, cr4
     or eax, 1 << 5      

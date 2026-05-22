@@ -22,8 +22,12 @@ struct vfs_dentry;
 struct vfs_inode_ops {
     int (*read)(struct vfs_inode *inode, uint64_t offset, uint64_t size, void *buf);
     int (*write)(struct vfs_inode *inode, uint64_t offset, uint64_t size, const void *buf);
+    int (*truncate)(struct vfs_inode *inode, uint64_t size);
     int (*readdir)(struct vfs_inode *dir, uint32_t index, struct vfs_dentry *entry);
     int (*lookup)(struct vfs_inode *dir, const char *name, struct vfs_inode **child);
+    int (*create)(struct vfs_inode *dir, const char *name, struct vfs_inode **child);
+    int (*unlink)(struct vfs_inode *dir, const char *name);
+    int (*mkdir)(struct vfs_inode *dir, const char *name);
 };
 
 struct vfs_inode {
@@ -75,6 +79,10 @@ int  vfs_write(struct vfs_file *file, uint64_t size, const void *buf);
 int  vfs_close(struct vfs_file *file);
 int  vfs_readdir(const char *path, uint32_t index, struct vfs_dentry *entry);
 int  vfs_stat(const char *path, struct vfs_dentry *entry);
+int  vfs_create(const char *path);
+int  vfs_unlink(const char *path);
+int  vfs_truncate(const char *path, uint64_t size);
+int  vfs_mkdir(const char *path);
 
 void vfs_inode_ref(struct vfs_inode *inode);
 void vfs_inode_unref(struct vfs_inode *inode);
