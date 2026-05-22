@@ -1,4 +1,5 @@
 #include "vga.h"
+#include <stddef.h>
 #include "../../kprintf.h"
 
 static int vga_row = 0;
@@ -84,8 +85,9 @@ void vga_set_cursor(int row, int col)
 
 unsigned char vga_default_color;
 
-static void vga_putch(char c)
+static void vga_putch(char c, void *ctx)
 {
+    (void)ctx;
     vga_putchar(c, vga_default_color);
 }
 
@@ -93,6 +95,6 @@ void vga_printf(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    kvformat(vga_putch, fmt, ap);
+    kvformat(vga_putch, NULL, fmt, ap);
     va_end(ap);
 }

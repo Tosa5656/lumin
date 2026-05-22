@@ -45,6 +45,9 @@ void kmain(void)
     serial_printf("RTC: %04d-%02d-%02d %02d:%02d:%02d\n",
                   tm.year, tm.month, tm.day,
                   tm.hour, tm.minute, tm.second);
+
+    __asm__("int3");
+
     vga_printf("\nRTC: %04d-%02d-%02d %02d:%02d:%02d",
                tm.year, tm.month, tm.day,
                tm.hour, tm.minute, tm.second);

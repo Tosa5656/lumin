@@ -1,4 +1,5 @@
 #include "serial.h"
+#include <stddef.h>
 #include "../../ports.h"
 #include "../../kprintf.h"
 
@@ -25,10 +26,16 @@ void serial_write(const char *str)
         serial_putchar(*str++);
 }
 
+static void serial_putch(char c, void *ctx)
+{
+    (void)ctx;
+    serial_putchar(c);
+}
+
 void serial_printf(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    kvformat(serial_putchar, fmt, ap);
+    kvformat(serial_putch, NULL, fmt, ap);
     va_end(ap);
 }

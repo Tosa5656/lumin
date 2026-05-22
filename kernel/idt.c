@@ -1,5 +1,7 @@
 #include "idt.h"
 #include "ports.h"
+#include "panic.h"
+#include "kprintf.h"
 #include "drivers/timer/timer.h"
 #include "drivers/serial/serial.h"
 #include "drivers/vga/vga.h"
@@ -95,10 +97,10 @@ void exception_handler(int vec, struct exception_frame *frame)
         rbp = fp[0];
     }
 
-    vga_printf("\n!!! %s (%d) RIP: 0x%p !!!", name, vec, (void*)frame->rip);
+    char msg[64];
+    ksnprintf(msg, sizeof(msg), "RIP: 0x%p  Error: 0x%x", (void*)frame->rip, (unsigned int)frame->error_code);
 
-    for (;;)
-        __asm__ volatile("hlt");
+    panic(name, msg);
 }
 
 void irq_handler(uint64_t int_no)

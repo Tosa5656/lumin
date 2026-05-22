@@ -6,8 +6,9 @@ typedef __builtin_va_list va_list;
 #define va_end(v)      __builtin_va_end(v)
 #define va_arg(v, t)   __builtin_va_arg(v, t)
 
-typedef void (*kputch_t)(char);
+typedef void (*kputch_t)(char, void *ctx);
 
-void kvformat(kputch_t putch, const char *fmt, va_list ap);
+void kvformat(kputch_t putch, void *ctx, const char *fmt, va_list ap);
+int ksnprintf(char *buf, unsigned long size, const char *fmt, ...);
 
 #endif
