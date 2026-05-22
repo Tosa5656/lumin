@@ -78,12 +78,14 @@ OBJS = obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/kprintf.o \
 
 kernel: mkdirs bootloader $(OBJS)
 	${LD} ${LDFLAGS} $(OBJS) -o bin/kernel.bin
-	${TRUNCATE} -s 56320 bin/kernel.bin
+	${TRUNCATE} -s 65536 bin/kernel.bin
 	${CAT} bin/bootloader.bin bin/kernel.bin > lumin.bin
 
-qemu: kernel
+fat32.img:
 	dd if=/dev/zero of=fat32.img bs=1M count=32
 	mkfs.fat -F 32 fat32.img
+
+qemu: kernel fat32.img
 	qemu-system-x86_64 -drive format=raw,file=lumin.bin \
 						-drive format=raw,file=fat32.img \
 						-serial mon:stdio

@@ -47,16 +47,16 @@ void kmain(void)
     idt_init();
     serial_write("IDT initialized (exceptions + IRQs).\n");
 
+    pmm_init();
+    serial_printf("PMM: %d free pages\n", pmm_free_count());
+    kmalloc_init();
+
     timer_init(1000);
 
     unsigned char green = vga_entry_color(VGA_GREEN, VGA_BLACK);
     vga_write("\nTimer: ", color);
     vga_write(timer_name(timer_get_type()), green);
     serial_printf("Timer: %s\n", timer_name(timer_get_type()));
-
-    pmm_init(0x190000, 0x400000);
-    serial_printf("PMM: %d free pages\n", pmm_free_count());
-    kmalloc_init();
 
     pci_scan();
 

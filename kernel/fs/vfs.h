@@ -6,7 +6,7 @@
 
 #define VFS_NAME_MAX   256
 #define VFS_MOUNT_MAX  16
-#define VFS_FILE_MAX   16
+#define VFS_FILE_MAX   64
 #define VFS_PATH_MAX   512
 
 enum vfs_inode_type {

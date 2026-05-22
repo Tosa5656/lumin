@@ -158,8 +158,6 @@ int block_parse_mbr(struct block_device *dev, struct partition *parts, int max_p
 
 int block_register_partitions(struct block_device *dev)
 {
-    stored_part_count = 0;
-
     struct partition parts[BLOCK_MAX_PARTS];
     int n = block_parse_mbr(dev, parts, BLOCK_MAX_PARTS);
     if (n <= 0)

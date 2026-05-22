@@ -94,28 +94,12 @@ void keyboard_handler(void)
 
     if (!c) return;
 
-    /* backspace */
-    if (scancode == 0x0E)
-    {
-        vga_backspace();
-        serial_write("\b \b");
-        if (keybuf_tail != keybuf_head)
-        {
-            keybuf_tail = (keybuf_tail - 1) & (KEYBUF_SIZE - 1);
-            keybuf[keybuf_tail] = 0;
-        }
-        return;
-    }
-
     int next = (keybuf_head + 1) & (KEYBUF_SIZE - 1);
     if (next != keybuf_tail)
     {
-        keybuf[keybuf_head] = c;
+        keybuf[keybuf_head] = (scancode == 0x0E) ? '\b' : c;
         keybuf_head = next;
     }
-
-    vga_putchar(c, keyboard_color);
-    serial_putchar(c);
 }
 
 int keyboard_readline(char *buf, int max)
@@ -136,11 +120,18 @@ int keyboard_readline(char *buf, int max)
             }
             if (c == '\b')
             {
-                if (idx > 0) idx--;
+                if (idx > 0)
+                {
+                    idx--;
+                    vga_backspace();
+                    serial_write("\b \b");
+                }
             }
             else if (idx < max - 1)
             {
                 buf[idx++] = c;
+                vga_putchar(c, keyboard_color);
+                serial_putchar(c);
             }
         }
     }

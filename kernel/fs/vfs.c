@@ -363,7 +363,8 @@ static struct vfs_inode *devfs_alloc_inode(struct vfs_superblock *sb)
 
 static void devfs_destroy_inode(struct vfs_inode *inode)
 {
-    if (inode) kfree(inode);
+    if (!inode || inode == &devfs_root_inode) return;
+    kfree(inode);
 }
 
 static int devfs_dir_readdir(struct vfs_inode *dir, uint32_t index, struct vfs_dentry *entry)

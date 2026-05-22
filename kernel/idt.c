@@ -120,6 +120,12 @@ void irq_handler(uint64_t int_no)
         timer_tick_handler();
         timer_eoi();
     }
+    else
+    {
+        if (int_no >= 40)
+            outb(0xA0, 0x20);
+        outb(0x20, 0x20);
+    }
 }
 
 void idt_init(void)

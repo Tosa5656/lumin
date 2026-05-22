@@ -1,33 +1,8 @@
 #include "acpi.h"
+#include "acpi_common.h"
 #include "ports.h"
 #include <stdint.h>
 #include <stddef.h>
-
-#define RSDP_SIG "RSD PTR "
-
-struct __attribute__((packed)) rsdp_t {
-    char     signature[8];
-    uint8_t  checksum;
-    char     oem_id[6];
-    uint8_t  revision;
-    uint32_t rsdt_addr;
-    uint32_t length;
-    uint64_t xsdt_addr;
-    uint8_t  ext_checksum;
-    uint8_t  reserved[3];
-};
-
-struct __attribute__((packed)) sdt_t {
-    char     signature[4];
-    uint32_t length;
-    uint8_t  revision;
-    uint8_t  checksum;
-    char     oem_id[6];
-    char     oem_table_id[8];
-    uint32_t oem_revision;
-    uint32_t creator_id;
-    uint32_t creator_revision;
-};
 
 struct __attribute__((packed)) fadt_t {
     struct sdt_t h;
@@ -72,35 +47,6 @@ struct __attribute__((packed)) fadt_t {
     uint8_t      reset_reg[12];
     uint8_t      reset_value;
 };
-
-static uint8_t acpi_checksum(const void *data, size_t len)
-{
-    uint8_t sum = 0;
-    const uint8_t *p = (const uint8_t *)data;
-    for (size_t i = 0; i < len; i++)
-        sum += p[i];
-    return sum;
-}
-
-static struct rsdp_t *rsdp_find(void)
-{
-    for (uint32_t addr = 0xE0000; addr < 0xFFFFF; addr += 16)
-    {
-        const char *p = (const char *)(uint64_t)addr;
-        int match = 1;
-        for (int i = 0; i < 8; i++)
-        {
-            if (p[i] != RSDP_SIG[i]) { match = 0; break; }
-        }
-        if (match)
-        {
-            struct rsdp_t *rsdp = (struct rsdp_t *)(uint64_t)addr;
-            if (acpi_checksum(rsdp, 20) == 0)
-                return rsdp;
-        }
-    }
-    return NULL;
-}
 
 static struct fadt_t *fadt_find(struct rsdp_t *rsdp)
 {
@@ -228,7 +174,7 @@ void acpi_shutdown(void)
     uint16_t slp_typb = 0x07;
 
     struct sdt_t *dsdt_hdr = (struct sdt_t *)(uint64_t)fadt->dsdt;
-    if (dsdt_hdr)
+    if (dsdt_hdr && acpi_checksum(dsdt_hdr, dsdt_hdr->length) == 0)
     {
         const uint8_t *dsdt_data = (const uint8_t *)dsdt_hdr;
         uint32_t dsdt_len = dsdt_hdr->length;
@@ -236,7 +182,8 @@ void acpi_shutdown(void)
     }
 
     // SLP_EN (bit 13) | SLP_TYPx (bits 10-12)
-    outw((uint16_t)pm1a_cnt, (slp_typa << 10) | (1 << 13));
+    if (pm1a_cnt)
+        outw((uint16_t)pm1a_cnt, (slp_typa << 10) | (1 << 13));
     if (pm1b_cnt)
         outw((uint16_t)pm1b_cnt, (slp_typb << 10) | (1 << 13));
 

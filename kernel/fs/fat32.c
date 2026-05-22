@@ -3,10 +3,15 @@
 #include "mm/kmalloc.h"
 #include <stddef.h>
 
-static void memcpy8(void *dst, const void *src, int n)
+static inline uint32_t rd32(const uint8_t *p)
 {
-    for (int i = 0; i < n; i++)
-        ((uint8_t *)dst)[i] = ((const uint8_t *)src)[i];
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static inline void wr32(uint8_t *p, uint32_t v)
+{
+    p[0] = v & 0xFF; p[1] = (v >> 8) & 0xFF;
+    p[2] = (v >> 16) & 0xFF; p[3] = (v >> 24) & 0xFF;
 }
 
 static uint32_t fat_next_cluster(struct fat32_fs *fs, uint32_t cluster)
@@ -19,8 +24,7 @@ static uint32_t fat_next_cluster(struct fat32_fs *fs, uint32_t cluster)
     if (block_read(fs->bdev, fat_sector, 1, buf) != 0)
         return FAT32_EOC;
 
-    uint32_t val = *(uint32_t *)(buf + byte_off) & FAT_MASK;
-    return val;
+    return rd32(buf + byte_off) & FAT_MASK;
 }
 
 int fat32_read_cluster(struct fat32_fs *fs, uint32_t cluster, void *buf)
@@ -42,8 +46,8 @@ static int fat_set_cluster(struct fat32_fs *fs, uint32_t cluster, uint32_t value
     if (block_read(fs->bdev, fat_sector, 1, buf) != 0)
         return -1;
 
-    uint32_t *entry = (uint32_t *)(buf + byte_off);
-    *entry = (*entry & ~FAT_MASK) | (value & FAT_MASK);
+    uint32_t old = rd32(buf + byte_off);
+    wr32(buf + byte_off, (old & ~FAT_MASK) | (value & FAT_MASK));
 
     return block_write(fs->bdev, fat_sector, 1, buf);
 }
@@ -119,15 +123,15 @@ static int fat_write_fsinfo(struct fat32_fs *fs, uint32_t free_clusters, uint32_
     if (block_read(fs->bdev, fsi_sector, 1, buf) != 0)
         return -1;
 
-    uint32_t sig1 = *(uint32_t *)(buf + 0);
-    uint32_t sig2 = *(uint32_t *)(buf + 484);
+    uint32_t sig1 = rd32(buf + 0);
+    uint32_t sig2 = rd32(buf + 484);
     if (sig1 != 0x41615252 || sig2 != 0x61417272)
         return 0;
 
     if (free_clusters != 0xFFFFFFFF)
-        *(uint32_t *)(buf + 488) = free_clusters;
+        wr32(buf + 488, free_clusters);
     if (next_free != 0xFFFFFFFF)
-        *(uint32_t *)(buf + 492) = next_free;
+        wr32(buf + 492, next_free);
 
     return block_write(fs->bdev, fsi_sector, 1, buf);
 }
@@ -322,16 +326,16 @@ int fat32_read_fsinfo(struct fat32_fs *fs, uint32_t *free_clusters, uint32_t *ne
     if (block_read(fs->bdev, fsi_sector, 1, buf) != 0)
         return -1;
 
-    uint32_t sig1 = *(uint32_t *)(buf + 0);
-    uint32_t sig2 = *(uint32_t *)(buf + 484);
+    uint32_t sig1 = rd32(buf + 0);
+    uint32_t sig2 = rd32(buf + 484);
 
     if (sig1 != 0x41615252 || sig2 != 0x61417272)
         return -1;
 
     if (free_clusters)
-        *free_clusters = *(uint32_t *)(buf + 488);
+        *free_clusters = rd32(buf + 488);
     if (next_free)
-        *next_free = *(uint32_t *)(buf + 492);
+        *next_free = rd32(buf + 492);
 
     return 0;
 }
@@ -382,7 +386,7 @@ int fat32_mount(struct block_device *bdev, struct fat32_fs *fs)
         return -1;
 
     fs->bdev = bdev;
-    memcpy8(&fs->bpb, buf, sizeof(struct fat32_bpb));
+    __builtin_memcpy(&fs->bpb, buf, sizeof(struct fat32_bpb));
 
     fs->sectors_per_fat = bpb->sectors_per_fat_32;
     fs->fat_start = bpb->reserved_sectors;
@@ -942,7 +946,7 @@ static int dir_write_entries(struct fat32_fs *fs, uint32_t dir_cluster,
                                 return -1;
 
                             struct fat32_dent *de2 = (struct fat32_dent *)(wbuf + ent_off * 32);
-                            memcpy8(de2, entry, sizeof(struct fat32_dent));
+                            __builtin_memcpy(de2, entry, sizeof(struct fat32_dent));
 
                             if (block_write(fs->bdev, ws, 1, wbuf) != 0)
                                 return -1;
@@ -1038,7 +1042,7 @@ int fat32_create_file(struct fat32_fs *fs, uint32_t dir_cluster,
 
     /* build the directory entry */
     struct fat32_dent dent;
-    memcpy8(dent.name, name11, 11);
+    __builtin_memcpy(dent.name, name11, 11);
     dent.attr = ATTR_ARCHIVE;
     dent.nt_res = 0;
     dent.ctime_tenth = 0;
@@ -1169,7 +1173,7 @@ int fat32_mkdir(struct fat32_fs *fs, uint32_t dir_cluster,
         uint8_t buf[512];
         block_read(fs->bdev, first_sector, 1, buf);
         struct fat32_dent *dot = (struct fat32_dent *)buf;
-        memcpy8(dot->name, ".          ", 11);
+        __builtin_memcpy(dot->name, ".          ", 11);
         dot->attr = ATTR_DIRECTORY;
         dot->cluster_lo = cl & 0xFFFF;
         dot->cluster_hi = (cl >> 16) & 0xFFFF;
@@ -1182,7 +1186,7 @@ int fat32_mkdir(struct fat32_fs *fs, uint32_t dir_cluster,
         uint8_t buf[512];
         block_read(fs->bdev, first_sector, 1, buf);
         struct fat32_dent *dotdot = (struct fat32_dent *)(buf + 32);
-        memcpy8(dotdot->name, "..         ", 11);
+        __builtin_memcpy(dotdot->name, "..         ", 11);
         dotdot->attr = ATTR_DIRECTORY;
         dotdot->cluster_lo = dir_cluster & 0xFFFF;
         dotdot->cluster_hi = (dir_cluster >> 16) & 0xFFFF;
@@ -1203,7 +1207,7 @@ int fat32_mkdir(struct fat32_fs *fs, uint32_t dir_cluster,
     build_lfn_entries(name, name_len, lfns, &lfn_count);
 
     struct fat32_dent dent;
-    memcpy8(dent.name, name11, 11);
+    __builtin_memcpy(dent.name, name11, 11);
     dent.attr = ATTR_DIRECTORY;
     dent.nt_res = 0;
     dent.ctime_tenth = 0;

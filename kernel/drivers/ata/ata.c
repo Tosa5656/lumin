@@ -5,7 +5,7 @@
 #include "kprintf.h"
 #include <stddef.h>
 
-#define TIMEOUT_NS  10000000
+#define TIMEOUT_TSC 500000000ULL
 #define MAX_DEVICES 4
 
 static struct ata_device devices[MAX_DEVICES];
@@ -58,28 +58,29 @@ static uint16_t reg_cmd(int bus)          { return bus + 7; }
 
 #define CMD_ATAPI_PACKET  0xA0
 
-static int poll_status(int bus, uint8_t mask, uint8_t val, int timeout_ns)
+static int poll_status(int bus, uint8_t mask, uint8_t val)
 {
-    for (int i = 0; i < timeout_ns; i++)
+    uint64_t deadline = rdtsc() + TIMEOUT_TSC;
+    while (rdtsc() < deadline)
     {
         uint8_t s = inb(reg_status(bus));
         if ((s & mask) == val)
             return 0;
         if (s & STATUS_ERR)
             return -1;
-        for (volatile int j = 0; j < 10; j++);
+        __asm__ volatile("pause");
     }
     return -1;
 }
 
 static int poll_bsy(int bus)
 {
-    return poll_status(bus, STATUS_BSY, 0, TIMEOUT_NS);
+    return poll_status(bus, STATUS_BSY, 0);
 }
 
 static int poll_drq(int bus)
 {
-    return poll_status(bus, STATUS_BSY | STATUS_DRQ, STATUS_DRQ, TIMEOUT_NS);
+    return poll_status(bus, STATUS_BSY | STATUS_DRQ, STATUS_DRQ);
 }
 
 static int ata_wait(int bus)

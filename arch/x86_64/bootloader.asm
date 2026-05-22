@@ -7,13 +7,29 @@ _start:
     mov es, ax
 
     mov ah, 0x02
-    mov al, 110
+    mov al, 128
     mov ch, 0
     mov cl, 2
     mov dh, 0
     mov bx, 0x8000
     int 0x13
     jc disk_error
+
+    mov di, 0x6000
+    xor ebx, ebx
+    xor bp, bp
+    mov edx, 0x534D4150
+.e820_loop:
+    mov eax, 0xE820
+    mov ecx, 20
+    int 0x15
+    jc .e820_done
+    inc bp
+    add di, 20
+    test ebx, ebx
+    jnz .e820_loop
+.e820_done:
+    mov [0x5FFC], bp
 
     cli
     lgdt [gdt32_descriptor]
@@ -31,7 +47,7 @@ init_pm:
 
     mov esi, 0x8000
     mov edi, 0x100000
-    mov ecx, 14080
+    mov ecx, 16384
     rep movsd
 
     mov edi, 0x1000
@@ -62,6 +78,39 @@ init_pm:
     add edi, 8
     add ebx, 4096
     loop .set_entry2
+
+    movzx ecx, word [0x5FFC]
+    test ecx, ecx
+    jz .no_huge
+    mov esi, 0x6000
+    xor ebx, ebx
+.find_max:
+    cmp dword [esi + 16], 1
+    jne .next
+    mov eax, [esi]
+    add eax, [esi + 8]
+    cmp eax, ebx
+    jbe .next
+    mov ebx, eax
+.next:
+    add esi, 20
+    dec ecx
+    jnz .find_max
+    add ebx, 0x1FFFFF
+    and ebx, 0xFFE00000
+    shr ebx, 21
+    cmp ebx, 2
+    jle .no_huge
+    mov edi, 0x3010
+    mov eax, 0x00400083
+    mov ecx, ebx
+    sub ecx, 2
+.map_huge:
+    mov [edi], eax
+    add edi, 8
+    add eax, 0x200000
+    loop .map_huge
+.no_huge:
 
     mov eax, cr4
     or eax, 1 << 5      

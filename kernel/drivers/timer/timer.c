@@ -17,12 +17,14 @@ void timer_init(uint32_t hz)
 
     if (hpet_init(hz) == 0)
     {
+        pit_stop();
         active = TIMER_HPET;
         return;
     }
 
     if (lapic_init(hz) == 0)
     {
+        pit_stop();
         active = TIMER_LAPIC;
         return;
     }

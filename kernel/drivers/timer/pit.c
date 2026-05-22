@@ -16,6 +16,13 @@ void pit_init(uint32_t hz)
     ticks = 0;
 }
 
+void pit_stop(void)
+{
+    outb(PIT_CMD, 0x30);
+    outb(PIT_DATA0, 0);
+    outb(PIT_DATA0, 0);
+}
+
 void pit_tick(void)
 {
     ticks++;

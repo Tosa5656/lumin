@@ -1,4 +1,7 @@
 #include "pmm.h"
+#include "e820.h"
+
+static const uint64_t MIN_ADDR = 0x200000;
 
 struct free_page {
     struct free_page *next;
@@ -7,14 +10,45 @@ struct free_page {
 static struct free_page *free_list = NULL;
 static size_t free_pages = 0;
 
-void pmm_init(uint64_t start, uint64_t end)
+static void add_range(uint64_t start, uint64_t end)
 {
-    free_list = NULL;
-    free_pages = 0;
     start = (start + 0xFFF) & ~0xFFFULL;
     end   = end & ~0xFFFULL;
     for (uint64_t addr = start; addr < end; addr += 0x1000)
         pmm_free((void *)addr);
+}
+
+void pmm_init(void)
+{
+    free_list = NULL;
+    free_pages = 0;
+
+    uint16_t count = *E820_COUNT_ADDR;
+    if (count == 0 || count > 100)
+    {
+        add_range(MIN_ADDR, 0x400000);
+        return;
+    }
+
+    for (uint16_t i = 0; i < count; i++)
+    {
+        struct e820_entry *e = &E820_ENTRIES[i];
+        if (e->type != E820_AVAILABLE)
+            continue;
+
+        uint64_t start = e->base;
+        uint64_t end   = e->base + e->length;
+
+        if (end <= MIN_ADDR)
+            continue;
+        if (start < MIN_ADDR)
+            start = MIN_ADDR;
+
+        add_range(start, end);
+    }
+
+    if (free_pages == 0)
+        add_range(MIN_ADDR, 0x400000);
 }
 
 void *pmm_alloc(void)
