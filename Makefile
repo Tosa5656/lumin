@@ -34,7 +34,7 @@ kernel: mkdirs bootloader
 	${LD} ${LDFLAGS} obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/kprintf.o obj/serial.o obj/rtc.o obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o obj/idt.o obj/keyboard.o -o bin/kernel.bin
 	${TRUNCATE} -s 13312 bin/kernel.bin
 
-	${CAT} bin/bootloader.bin bin/kernel.bin > kernel.bin
+	${CAT} bin/bootloader.bin bin/kernel.bin > lumin.bin
 
 qemu: kernel
-	qemu-system-x86_64 kernel.bin
+	qemu-system-x86_64 lumin.bin
