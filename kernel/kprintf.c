@@ -45,6 +45,13 @@ void kvformat(kputch_t putch, void *ctx, const char *fmt, va_list ap)
         while (*fmt >= '0' && *fmt <= '9')
             width = width * 10 + (*fmt++ - '0');
 
+        int longlong = 0;
+        while (*fmt == 'l')
+        {
+            longlong++;
+            fmt++;
+        }
+
         switch (*fmt)
         {
             case 's':
@@ -55,17 +62,27 @@ void kvformat(kputch_t putch, void *ctx, const char *fmt, va_list ap)
                 break;
             }
             case 'd':
-                print_dec(putch, ctx, va_arg(ap, int), 1, width, pad);
+                if (longlong)
+                    print_dec(putch, ctx, va_arg(ap, long long), 1, width, pad);
+                else
+                    print_dec(putch, ctx, va_arg(ap, int), 1, width, pad);
                 break;
             case 'u':
-                print_dec(putch, ctx, va_arg(ap, unsigned int), 0, width, pad);
+                if (longlong)
+                    print_dec(putch, ctx, va_arg(ap, unsigned long long), 0, width, pad);
+                else
+                    print_dec(putch, ctx, va_arg(ap, unsigned int), 0, width, pad);
                 break;
             case 'x':
-                print_hex(putch, ctx, va_arg(ap, unsigned int), width, pad, 0);
-                break;
             case 'X':
-                print_hex(putch, ctx, va_arg(ap, unsigned int), width, pad, 1);
+            {
+                int upper = (*fmt == 'X');
+                if (longlong)
+                    print_hex(putch, ctx, va_arg(ap, unsigned long long), width, pad, upper);
+                else
+                    print_hex(putch, ctx, va_arg(ap, unsigned int), width, pad, upper);
                 break;
+            }
             case 'p':
             {
                 putch('0', ctx); putch('x', ctx);

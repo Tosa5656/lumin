@@ -8,6 +8,7 @@
 #include "drivers/pci/pci.h"
 #include "drivers/ata/ata.h"
 #include "block/block.h"
+#include "fs/vfs.h"
 
 unsigned char keyboard_color;
 
@@ -45,7 +46,7 @@ void kmain(void)
     vga_write(timer_name(timer_get_type()), green);
     serial_printf("Timer: %s\n", timer_name(timer_get_type()));
 
-    pmm_init(0x110000, 0x200000);
+    pmm_init(0x180000, 0x200000);
     serial_printf("PMM: %d free pages\n", pmm_free_count());
     kmalloc_init();
 
@@ -66,28 +67,42 @@ void kmain(void)
     int ata_count = ata_init();
     serial_printf("block: %d device(s) total\n", block_count());
 
-    struct partition parts[BLOCK_MAX_PARTS];
-    for (int i = 0; i < block_count(); i++)
-    {
-        struct block_device *bdev = block_get(i);
-        if (!bdev) continue;
-        serial_printf("block[%d]: %s, %llu sectors\n",
-                      i, bdev->name, (unsigned long long)bdev->sector_count);
+    vfs_init();
+    vfs_mount_devfs("/");
+    serial_printf("vfs: devfs mounted at '/'\n");
 
-        int np = block_parse_mbr(bdev, parts, BLOCK_MAX_PARTS);
-        if (np > 0)
+    struct vfs_dentry de;
+    serial_printf("vfs: ls '/':\n");
+    for (int i = 0; vfs_readdir("/", i, &de) == 0; i++)
+    {
+        serial_printf("  %s (ino=%llu, size=%llu, type=%d)\n",
+                      de.name, (unsigned long long)de.ino,
+                      (unsigned long long)de.size, de.type);
+    }
+
+    if (block_count() > 0)
+    {
+        struct block_device *bdev = block_get(0);
+        if (bdev)
         {
-            serial_printf("  MBR: %d partition(s)\n", np);
-            for (int p = 0; p < np; p++)
-                serial_printf("  part%d: type=0x%02x start=%llu size=%llu%s\n",
-                              parts[p].index, parts[p].type,
-                              (unsigned long long)parts[p].start_lba,
-                              (unsigned long long)parts[p].sector_count,
-                              parts[p].bootable ? " boot" : "");
-        }
-        else
-        {
-            serial_printf("  no MBR\n");
+            char devpath[64];
+            int n;
+            for (n = 0; "/"[n]; n++) devpath[n] = "/"[n];
+            n = 1;
+            for (int k = 0; bdev->name[k] && k < 60; k++)
+                devpath[n++] = bdev->name[k];
+            devpath[n] = '\0';
+
+            struct vfs_file *f = vfs_open(devpath, VFS_O_READ);
+            if (f)
+            {
+                serial_printf("vfs: opened '%s' OK\n", devpath);
+                uint8_t mbr[512];
+                int r = vfs_read(f, 512, mbr);
+                serial_printf("vfs: read %d bytes, boot sig=0x%02x%02x\n",
+                              r, mbr[0x1FF], mbr[0x1FE]);
+                vfs_close(f);
+            }
         }
     }
 

@@ -37,8 +37,9 @@ kernel: mkdirs bootloader
 	${CC} ${CFLAGS} -c kernel/drivers/pci/pci.c -o obj/pci.o
 	${CC} ${CFLAGS} -c kernel/drivers/ata/ata.c -o obj/ata.o
 	${CC} ${CFLAGS} -c kernel/block/block.c -o obj/block.o
-	${LD} ${LDFLAGS} obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/kprintf.o obj/serial.o obj/rtc.o obj/panic.o obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o obj/idt.o obj/keyboard.o obj/pmm.o obj/kmalloc.o obj/pci.o obj/ata.o obj/block.o -o bin/kernel.bin
-	${TRUNCATE} -s 24576 bin/kernel.bin
+	${CC} ${CFLAGS} -c kernel/fs/vfs.c -o obj/vfs.o
+	${LD} ${LDFLAGS} obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/kprintf.o obj/serial.o obj/rtc.o obj/panic.o obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o obj/idt.o obj/keyboard.o obj/pmm.o obj/kmalloc.o obj/pci.o obj/ata.o obj/block.o obj/vfs.o -o bin/kernel.bin
+	${TRUNCATE} -s 30720 bin/kernel.bin
 
 	${CAT} bin/bootloader.bin bin/kernel.bin > lumin.bin
 
