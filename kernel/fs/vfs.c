@@ -7,7 +7,11 @@
 static struct vfs_file file_table[VFS_FILE_MAX];
 static int file_count;
 
-static struct vfs_superblock mounts[VFS_MOUNT_MAX];
+struct vfs_mount_entry {
+    char path[VFS_PATH_MAX];
+    struct vfs_superblock sb;
+};
+static struct vfs_mount_entry mounts[VFS_MOUNT_MAX];
 static int mount_count;
 
 void vfs_inode_ref(struct vfs_inode *inode)
@@ -23,6 +27,12 @@ void vfs_inode_unref(struct vfs_inode *inode)
         inode->sb->sb_ops->destroy_inode(inode);
 }
 
+static int path_match(const char *a, const char *b)
+{
+    while (*a && *b && *a == *b) { a++; b++; }
+    return (*a == '\0' && *b == '\0') ? 1 : 0;
+}
+
 static int resolve_full(const char *path, struct vfs_inode **out_inode)
 {
     if (!path || *path != '/' || !out_inode)
@@ -30,37 +40,70 @@ static int resolve_full(const char *path, struct vfs_inode **out_inode)
     if (mount_count == 0)
         return -1;
 
-    struct vfs_inode *cur = mounts[0].root;
+    struct vfs_inode *cur = mounts[0].sb.root;
     if (!cur) return -1;
     vfs_inode_ref(cur);
 
     char buf[VFS_PATH_MAX];
-    int i = 0, j;
+    char fullpath[VFS_PATH_MAX];
+    int fp_len = 0;
+
+    int i = 0;
 
     while (path[i] != '\0')
     {
-        while (path[i] == '/') i++;
+        while (path[i] == '/')
+        {
+            if (fp_len < VFS_PATH_MAX - 1)
+                fullpath[fp_len++] = path[i];
+            i++;
+        }
         if (path[i] == '\0') break;
 
-        j = 0;
+        int j = 0;
         while (path[i] != '/' && path[i] != '\0' && j < VFS_NAME_MAX - 1)
             buf[j++] = path[i++];
         buf[j] = '\0';
 
-        if (cur->type != VFS_DIR || !cur->ops || !cur->ops->lookup)
+        /* add this component to fullpath */
+        for (int k = 0; k < j && fp_len < VFS_PATH_MAX - 1; k++)
+            fullpath[fp_len++] = buf[k];
+        fullpath[fp_len] = '\0';
+
+        /* check if this path is a mount point */
+        struct vfs_inode *mnt_root = NULL;
+        for (int mi = 1; mi < mount_count; mi++)
         {
-            vfs_inode_unref(cur);
-            return -1;
+            if (path_match(mounts[mi].path, fullpath))
+            {
+                mnt_root = mounts[mi].sb.root;
+                break;
+            }
         }
 
-        struct vfs_inode *next = NULL;
-        if (cur->ops->lookup(cur, buf, &next) != 0 || !next)
+        if (mnt_root)
         {
             vfs_inode_unref(cur);
-            return -1;
+            cur = mnt_root;
+            vfs_inode_ref(cur);
         }
-        vfs_inode_unref(cur);
-        cur = next;
+        else
+        {
+            if (cur->type != VFS_DIR || !cur->ops || !cur->ops->lookup)
+            {
+                vfs_inode_unref(cur);
+                return -1;
+            }
+
+            struct vfs_inode *next = NULL;
+            if (cur->ops->lookup(cur, buf, &next) != 0 || !next)
+            {
+                vfs_inode_unref(cur);
+                return -1;
+            }
+            vfs_inode_unref(cur);
+            cur = next;
+        }
     }
 
     *out_inode = cur;
@@ -73,6 +116,9 @@ int vfs_init(void)
     mount_count = 0;
     for (int i = 0; i < VFS_FILE_MAX; i++)
         file_table[i].inode = NULL;
+    /* ensure mounts[0].path is "/" for the root mount */
+    mounts[0].path[0] = '/';
+    mounts[0].path[1] = '\0';
     serial_write("vfs: initialized\n");
     return 0;
 }
@@ -84,8 +130,14 @@ int vfs_mount(const char *path, struct vfs_superblock *sb)
     if (!sb->root || !sb->sb_ops)
         return -1;
 
+    int n;
+    for (n = 0; path[n] && n < VFS_PATH_MAX - 1; n++)
+        mounts[mount_count].path[n] = path[n];
+    mounts[mount_count].path[n] = '\0';
+
     sb->mounted = 1;
-    mounts[mount_count++] = *sb;
+    mounts[mount_count].sb = *sb;
+    mount_count++;
     serial_printf("vfs: mounted '%s'\n", path);
     return 0;
 }
@@ -182,6 +234,106 @@ int vfs_stat(const char *path, struct vfs_dentry *entry)
     return 0;
 }
 
+static int resolve_parent(const char *path, struct vfs_inode **out_parent, char *child_name)
+{
+    if (!path || *path != '/' || !out_parent || !child_name)
+        return -1;
+
+    char buf[VFS_PATH_MAX];
+    int i = 0;
+    while (path[i] != '\0') { buf[i] = path[i]; i++; }
+    buf[i] = '\0';
+
+    char *slash = buf + i - 1;
+    while (slash > buf && *slash == '/') slash--;
+    while (slash > buf && *slash != '/') slash--;
+
+    char parent_path[VFS_PATH_MAX];
+    int pn = 0;
+    for (int j = 0; j < slash - buf + 1; j++)
+        parent_path[pn++] = buf[j];
+    if (pn == 0) { parent_path[pn++] = '/'; }
+    parent_path[pn] = '\0';
+
+    if (resolve_full(parent_path, out_parent) != 0)
+        return -1;
+
+    int cn = 0;
+    const char *cp = (slash[0] == '/') ? slash + 1 : slash;
+    while (*cp && *cp == '/') cp++;
+    while (*cp && *cp != '/' && cn < VFS_NAME_MAX - 1)
+        child_name[cn++] = *cp++;
+    child_name[cn] = '\0';
+
+    return 0;
+}
+
+int vfs_truncate(const char *path, uint64_t size)
+{
+    if (!path) return -1;
+    struct vfs_inode *inode = NULL;
+    if (resolve_full(path, &inode) != 0) return -1;
+    if (!inode->ops || !inode->ops->truncate)
+    {
+        vfs_inode_unref(inode);
+        return -1;
+    }
+    int r = inode->ops->truncate(inode, size);
+    vfs_inode_unref(inode);
+    return r;
+}
+
+int vfs_create(const char *path)
+{
+    if (!path) return -1;
+    struct vfs_inode *parent = NULL;
+    char child_name[VFS_NAME_MAX];
+    if (resolve_parent(path, &parent, child_name) != 0)
+        return -1;
+    if (parent->type != VFS_DIR || !parent->ops || !parent->ops->create)
+    {
+        vfs_inode_unref(parent);
+        return -1;
+    }
+    int r = parent->ops->create(parent, child_name, NULL);
+    vfs_inode_unref(parent);
+    return r;
+}
+
+int vfs_unlink(const char *path)
+{
+    if (!path) return -1;
+    struct vfs_inode *parent = NULL;
+    char child_name[VFS_NAME_MAX];
+    if (resolve_parent(path, &parent, child_name) != 0)
+        return -1;
+    if (parent->type != VFS_DIR || !parent->ops || !parent->ops->unlink)
+    {
+        vfs_inode_unref(parent);
+        return -1;
+    }
+    int r = parent->ops->unlink(parent, child_name);
+    vfs_inode_unref(parent);
+    return r;
+}
+
+int vfs_mkdir(const char *path)
+{
+    if (!path) return -1;
+    struct vfs_inode *parent = NULL;
+    char child_name[VFS_NAME_MAX];
+    if (resolve_parent(path, &parent, child_name) != 0)
+        return -1;
+    if (parent->type != VFS_DIR || !parent->ops || !parent->ops->mkdir)
+    {
+        vfs_inode_unref(parent);
+        return -1;
+    }
+    int r = parent->ops->mkdir(parent, child_name);
+    vfs_inode_unref(parent);
+    return r;
+}
+
 /* ───── devfs ───── */
 
 struct devfs_entry {
@@ -267,8 +419,12 @@ static int devfs_dir_lookup(struct vfs_inode *dir, const char *name, struct vfs_
             else if (inode->type == VFS_BLKDEV)
             {
                 static struct vfs_inode_ops blk_ops = {
-                    .read  = devfs_blk_read,
-                    .write = devfs_blk_write,
+                    .read     = devfs_blk_read,
+                    .write    = devfs_blk_write,
+                    .truncate = NULL,
+                    .create   = NULL,
+                    .unlink   = NULL,
+                    .mkdir    = NULL,
                 };
                 inode->ops = &blk_ops;
             }
@@ -281,8 +437,12 @@ static int devfs_dir_lookup(struct vfs_inode *dir, const char *name, struct vfs_
 }
 
 static struct vfs_inode_ops devfs_dir_ops = {
-    .readdir = devfs_dir_readdir,
-    .lookup  = devfs_dir_lookup,
+    .readdir  = devfs_dir_readdir,
+    .lookup   = devfs_dir_lookup,
+    .create   = NULL,
+    .unlink   = NULL,
+    .mkdir    = NULL,
+    .truncate = NULL,
 };
 
 static int devfs_blk_read(struct vfs_inode *inode, uint64_t offset, uint64_t size, void *buf)

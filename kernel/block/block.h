@@ -46,5 +46,8 @@ struct block_device *block_get(int index);
 int  block_count(void);
 
 int  block_parse_mbr(struct block_device *dev, struct partition *parts, int max_parts);
+int  block_register_partitions(struct block_device *dev);
+int  block_partition_count(void);
+struct block_device *block_partition_get(int index);
 
 #endif
