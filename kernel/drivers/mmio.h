@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "../mm/pmm.h"
 
 #define PAGE_PRESENT (1ULL << 0)
 #define PAGE_WRITE   (1ULL << 1)
@@ -21,9 +22,7 @@ static inline void mmio_map_2mb(uint64_t phys_addr)
 
     if (!(pdp[pdp_idx] & PAGE_PRESENT))
     {
-        static uint64_t pd_pool = 0x5000;
-        uint64_t pd_page = pd_pool;
-        pd_pool += 0x1000;
+        uint64_t pd_page = (uint64_t)pmm_alloc();
 
         volatile uint64_t *pd = (volatile uint64_t *)pd_page;
         for (int i = 0; i < 512; i++)

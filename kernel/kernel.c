@@ -3,6 +3,9 @@
 #include "drivers/rtc/rtc.h"
 #include "idt.h"
 #include "drivers/timer/timer.h"
+#include "mm/pmm.h"
+#include "mm/kmalloc.h"
+#include "drivers/pci/pci.h"
 
 unsigned char keyboard_color;
 
@@ -40,13 +43,17 @@ void kmain(void)
     vga_write(timer_name(timer_get_type()), green);
     serial_printf("Timer: %s\n", timer_name(timer_get_type()));
 
+    pmm_init(0x104000, 0x200000);
+    serial_printf("PMM: %d free pages\n", pmm_free_count());
+    kmalloc_init();
+
+    pci_scan();
+
     struct rtc_time tm;
     rtc_read(&tm);
     serial_printf("RTC: %04d-%02d-%02d %02d:%02d:%02d\n",
                   tm.year, tm.month, tm.day,
                   tm.hour, tm.minute, tm.second);
-
-    // __asm__("int3");
 
     vga_printf("\nRTC: %04d-%02d-%02d %02d:%02d:%02d",
                tm.year, tm.month, tm.day,
