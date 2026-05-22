@@ -41,4 +41,4 @@ kernel: mkdirs bootloader
 	${CAT} bin/bootloader.bin bin/kernel.bin > lumin.bin
 
 qemu: kernel
-	qemu-system-x86_64 lumin.bin
+	qemu-system-x86_64 -drive format=raw,file=lumin.bin -serial mon:stdio
