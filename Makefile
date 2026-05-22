@@ -6,7 +6,7 @@ LD = x86_64-pc-linux-gnu-gcc
 CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zone
 
 clean:
-	rm -rf bin obj os.bin
+	rm -rf bin obj kernel.bin
 
 mkdirs:
 	mkdir -p bin obj
@@ -24,7 +24,7 @@ kernel: mkdirs bootloader
 	${LD} -m64 -nostdlib -Wl,-Ttext,0x100000,--oformat,binary obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/idt.o obj/keyboard.o -o bin/kernel.bin
 	truncate -s 5120 bin/kernel.bin
 
-	cat bin/bootloader.bin bin/kernel.bin > os.bin
+	cat bin/bootloader.bin bin/kernel.bin > kernel.bin
 
 qemu: kernel
-	qemu-system-x86_64 os.bin
+	qemu-system-x86_64 kernel.bin
