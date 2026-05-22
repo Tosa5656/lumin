@@ -1,5 +1,6 @@
 #include "idt.h"
 #include "ports.h"
+#include "drivers/timer/timer.h"
 
 #define IDT_SIZE 256
 
@@ -7,6 +8,7 @@ static struct idt_entry_t idt[IDT_SIZE] __attribute__((aligned(16)));
 
 extern void isr32_handler(void);
 extern void isr33_handler(void);
+extern void isr48_handler(void);
 extern void keyboard_handler(void);
 
 static void pic_remap(void)
@@ -37,9 +39,21 @@ static void idt_set_entry(int index, void *handler, uint16_t selector, uint8_t a
 
 void irq_handler(uint64_t int_no)
 {
-    if (int_no == 33)
+    if (int_no == 32)
+    {
+        timer_tick_handler();
+        timer_eoi();
+    }
+    else if (int_no == 33)
+    {
         keyboard_handler();
-    outb(0x20, 0x20);
+        outb(0x20, 0x20);
+    }
+    else if (int_no == 48)
+    {
+        timer_tick_handler();
+        timer_eoi();
+    }
 }
 
 void idt_init(void)
@@ -48,6 +62,7 @@ void idt_init(void)
 
     idt_set_entry(32, isr32_handler, 0x08, 0x8E);
     idt_set_entry(33, isr33_handler, 0x08, 0x8E);
+    idt_set_entry(48, isr48_handler, 0x08, 0x8E);
 
     struct idt_ptr_t idt_ptr;
     idt_ptr.limit = sizeof(idt) - 1;

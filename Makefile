@@ -19,10 +19,14 @@ kernel: mkdirs bootloader
 	${AS} -f elf64 kernel/interrupts.asm -o obj/interrupts.o
 	${CC} ${CFLAGS} -c kernel/kernel.c -o obj/kernel.o
 	${CC} ${CFLAGS} -c kernel/drivers/vga/vga.c -o obj/vga.o
+	${CC} ${CFLAGS} -c kernel/drivers/timer/timer.c -o obj/timer.o
+	${CC} ${CFLAGS} -c kernel/drivers/timer/pit.c -o obj/pit.o
+	${CC} ${CFLAGS} -c kernel/drivers/timer/hpet.c -o obj/hpet.o
+	${CC} ${CFLAGS} -c kernel/drivers/timer/lapic.c -o obj/lapic.o
 	${CC} ${CFLAGS} -c kernel/idt.c -o obj/idt.o
 	${CC} ${CFLAGS} -c kernel/keyboard.c -o obj/keyboard.o
-	${LD} -m64 -nostdlib -Wl,-Ttext,0x100000,--oformat,binary obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/idt.o obj/keyboard.o -o bin/kernel.bin
-	truncate -s 5120 bin/kernel.bin
+	${LD} -m64 -nostdlib -Wl,-Ttext,0x100000,--oformat,binary obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o obj/idt.o obj/keyboard.o -o bin/kernel.bin
+	truncate -s 13312 bin/kernel.bin
 
 	cat bin/bootloader.bin bin/kernel.bin > kernel.bin
 

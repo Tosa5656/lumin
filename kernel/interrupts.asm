@@ -54,3 +54,11 @@ isr33_handler:
     call irq_handler
     popaq
     iretq
+
+global isr48_handler
+isr48_handler:
+    pushaq
+    mov rdi, 48
+    call irq_handler
+    popaq
+    iretq
