@@ -403,7 +403,7 @@ int ata_init(void)
                         bdev->registered   = 0;
 
                         if (block_register(bdev) == 0)
-                            serial_printf(" -> registered as %s\n", bdev->name);
+                            serial_printf(" -> registered as %s", bdev->name);
                     }
                 }
                 serial_write("\n");
