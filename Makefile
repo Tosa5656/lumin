@@ -4,6 +4,9 @@ AS = nasm
 CC = x86_64-pc-linux-gnu-gcc
 LD = x86_64-pc-linux-gnu-gcc
 CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zone
+LDFLAGS = -m64 -nostdlib -Wl,-T,kernel/kernel.ld,--oformat,binary
+TRUNCATE = truncate
+CAT = cat
 
 clean:
 	rm -rf bin obj kernel.bin
@@ -25,10 +28,10 @@ kernel: mkdirs bootloader
 	${CC} ${CFLAGS} -c kernel/drivers/timer/lapic.c -o obj/lapic.o
 	${CC} ${CFLAGS} -c kernel/idt.c -o obj/idt.o
 	${CC} ${CFLAGS} -c kernel/keyboard.c -o obj/keyboard.o
-	${LD} -m64 -nostdlib -Wl,-Ttext,0x100000,--oformat,binary obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o obj/idt.o obj/keyboard.o -o bin/kernel.bin
-	truncate -s 13312 bin/kernel.bin
+	${LD} ${LDFLAGS} obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o obj/idt.o obj/keyboard.o -o bin/kernel.bin
+	${TRUNCATE} -s 10240 bin/kernel.bin
 
-	cat bin/bootloader.bin bin/kernel.bin > kernel.bin
+	${CAT} bin/bootloader.bin bin/kernel.bin > kernel.bin
 
 qemu: kernel
 	qemu-system-x86_64 kernel.bin
