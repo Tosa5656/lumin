@@ -40,5 +40,8 @@ void vga_clear(unsigned char color);
 void vga_putchar(char c, unsigned char color);
 void vga_write(const char* str, unsigned char color);
 void vga_set_cursor(int row, int col);
+void vga_printf(const char *fmt, ...);
+
+extern unsigned char vga_default_color;
 
 #endif

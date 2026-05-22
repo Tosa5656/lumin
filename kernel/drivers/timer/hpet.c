@@ -4,7 +4,8 @@
 
 #define RSDP_SIG "RSD PTR "
 
-struct __attribute__((packed)) rsdp_t {
+struct __attribute__((packed)) rsdp_t
+{
     char     signature[8];
     uint8_t  checksum;
     char     oem_id[6];
@@ -16,7 +17,8 @@ struct __attribute__((packed)) rsdp_t {
     uint8_t  reserved[3];
 };
 
-struct __attribute__((packed)) sdt_t {
+struct __attribute__((packed)) sdt_t
+{
     char     signature[4];
     uint32_t length;
     uint8_t  revision;
@@ -28,7 +30,8 @@ struct __attribute__((packed)) sdt_t {
     uint32_t creator_revision;
 };
 
-struct __attribute__((packed)) acpi_gas_t {
+struct __attribute__((packed)) acpi_gas_t
+{
     uint8_t  address_space;
     uint8_t  bit_width;
     uint8_t  bit_offset;
@@ -36,7 +39,8 @@ struct __attribute__((packed)) acpi_gas_t {
     uint64_t address;
 };
 
-struct __attribute__((packed)) hpet_table_t {
+struct __attribute__((packed)) hpet_table_t
+{
     struct sdt_t      header;
     uint32_t          event_timer_block_id;
     struct acpi_gas_t base_address;

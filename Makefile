@@ -26,10 +26,13 @@ kernel: mkdirs bootloader
 	${CC} ${CFLAGS} -c kernel/drivers/timer/pit.c -o obj/pit.o
 	${CC} ${CFLAGS} -c kernel/drivers/timer/hpet.c -o obj/hpet.o
 	${CC} ${CFLAGS} -c kernel/drivers/timer/lapic.c -o obj/lapic.o
+	${CC} ${CFLAGS} -c kernel/kprintf.c -o obj/kprintf.o
+	${CC} ${CFLAGS} -c kernel/drivers/serial/serial.c -o obj/serial.o
+	${CC} ${CFLAGS} -c kernel/drivers/rtc/rtc.c -o obj/rtc.o
 	${CC} ${CFLAGS} -c kernel/idt.c -o obj/idt.o
 	${CC} ${CFLAGS} -c kernel/keyboard.c -o obj/keyboard.o
-	${LD} ${LDFLAGS} obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o obj/idt.o obj/keyboard.o -o bin/kernel.bin
-	${TRUNCATE} -s 10240 bin/kernel.bin
+	${LD} ${LDFLAGS} obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/kprintf.o obj/serial.o obj/rtc.o obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o obj/idt.o obj/keyboard.o -o bin/kernel.bin
+	${TRUNCATE} -s 13312 bin/kernel.bin
 
 	${CAT} bin/bootloader.bin bin/kernel.bin > kernel.bin
 

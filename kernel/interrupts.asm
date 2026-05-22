@@ -2,6 +2,7 @@ bits 64
 section .text
 
 extern irq_handler
+extern exception_handler
 
 %macro pushaq 0
     push rax
@@ -38,6 +39,52 @@ extern irq_handler
     pop rbx
     pop rax
 %endmacro
+
+%macro exc_noerr 1
+    global exc%1_handler
+    exc%1_handler:
+        push 0
+        pushaq
+        mov rdi, %1
+        mov rsi, rsp
+        call exception_handler
+        popaq
+        add rsp, 8
+        iretq
+%endmacro
+
+%macro exc_err 1
+    global exc%1_handler
+    exc%1_handler:
+        pushaq
+        mov rdi, %1
+        mov rsi, rsp
+        call exception_handler
+        popaq
+        add rsp, 8
+        iretq
+%endmacro
+
+exc_noerr 0
+exc_noerr 1
+exc_noerr 2
+exc_noerr 3
+exc_noerr 4
+exc_noerr 5
+exc_noerr 6
+exc_noerr 7
+exc_err   8
+exc_noerr 9
+exc_err   10
+exc_err   11
+exc_err   12
+exc_err   13
+exc_err   14
+exc_noerr 15
+exc_noerr 16
+exc_err   17
+exc_noerr 18
+exc_noerr 19
 
 global isr32_handler
 isr32_handler:
