@@ -10,6 +10,8 @@
 #include "block/block.h"
 #include "fs/vfs.h"
 #include "fs/fat32.h"
+#include "keyboard.h"
+#include "shell.h"
 #include "acpi.h"
 
 unsigned char keyboard_color;
@@ -145,76 +147,11 @@ void kmain(void)
         serial_write("fat32: no FAT32 volume found\n");
     }
 
-    unsigned char cyan = vga_entry_color(VGA_CYAN, VGA_BLACK);
-    int count = 0;
-
     __asm__("sti");
+    keyboard_init();
 
-    serial_write("fat32: testing create/write/read/unlink\n");
-
-    serial_printf("fat32: creating /mnt/hello.txt...\n");
-    if (vfs_create("/mnt/hello.txt") == 0)
-        serial_write("  create OK\n");
-    else
-        serial_write("  create FAIL\n");
-
-    struct vfs_file *f = vfs_open("/mnt/hello.txt", VFS_O_WRITE);
-    if (f)
-    {
-        int w = vfs_write(f, 12, "Hello World!");
-        serial_printf("  wrote %d bytes\n", w);
-        vfs_close(f);
-    }
-
-    serial_write("fat32: creating /mnt/subdir...\n");
-    if (vfs_mkdir("/mnt/subdir") == 0)
-        serial_write("  mkdir OK\n");
-    else
-        serial_write("  mkdir FAIL\n");
-
-    serial_write("fat32: creating /mnt/subdir/file.txt...\n");
-    if (vfs_create("/mnt/subdir/file.txt") == 0)
-        serial_write("  create OK\n");
-    else
-        serial_write("  create FAIL\n");
-
-    char read_buf[64];
-    f = vfs_open("/mnt/hello.txt", VFS_O_READ);
-    if (f)
-    {
-        int r = vfs_read(f, 12, read_buf);
-        serial_printf("  read %d bytes: '", r);
-        for (int i = 0; i < r; i++) serial_putchar(read_buf[i]);
-        serial_write("'\n");
-        vfs_close(f);
-    }
-
-    serial_write("fat32: unlinking /mnt/hello.txt...\n");
-    if (vfs_unlink("/mnt/hello.txt") == 0)
-        serial_write("  unlink OK\n");
-    else
-        serial_write("  unlink FAIL\n");
-
-    vga_write("Hello World!", vga_entry_color(VGA_WHITE, VGA_BLACK));
-    
-    while (1)
-    {
-        timer_sleep(1000);
-        count++;
-        serial_printf("Tick: %d\n", count);
-
-        unsigned char row_color = (count % 2) ? vga_entry_color(VGA_WHITE, VGA_BLACK) : vga_entry_color(VGA_LIGHT_GREY, VGA_BLACK);
-        vga_write("\nTick: ", row_color);
-
-        char tb[32];
-        int n = count;
-        int i = 0;
-        if (n == 0) tb[i++] = '0';
-        while (n > 0) { tb[i++] = '0' + n % 10; n /= 10; }
-        for (int j = 0; j < i / 2; j++) { char tmp = tb[j]; tb[j] = tb[i - 1 - j]; tb[i - 1 - j] = tmp; }
-        tb[i] = '\0';
-        vga_write(tb, row_color);
-    }
+    serial_write("shell: starting...\n");
+    shell_run();
 
     Quit();
 }

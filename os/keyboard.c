@@ -1,10 +1,17 @@
+#include "keyboard.h"
 #include "ports.h"
 #include "drivers/vga/vga.h"
+#include "drivers/serial/serial.h"
 
 extern unsigned char keyboard_color;
 
 static int shift_pressed;
 static int caps_locked;
+
+/* ring buffer for ISR */
+static volatile char keybuf[KEYBUF_SIZE];
+static volatile int keybuf_head;
+static volatile int keybuf_tail;
 
 static const char keymap[128] = {
     [0x01] = 0,    [0x02] = '1',  [0x03] = '2',  [0x04] = '3',
@@ -40,6 +47,12 @@ static const char keymap_shift[128] = {
     [0x30] = 'B',  [0x31] = 'N',  [0x32] = 'M',  [0x33] = '<',
     [0x34] = '>',  [0x35] = '?',
 };
+
+void keyboard_init(void)
+{
+    keybuf_head = 0;
+    keybuf_tail = 0;
+}
 
 void keyboard_handler(void)
 {
@@ -79,6 +92,56 @@ void keyboard_handler(void)
     else
         c = keymap[scancode];
 
-    if (c)
-        vga_putchar(c, keyboard_color);
+    if (!c) return;
+
+    /* backspace */
+    if (scancode == 0x0E)
+    {
+        vga_backspace();
+        serial_write("\b \b");
+        if (keybuf_tail != keybuf_head)
+        {
+            keybuf_tail = (keybuf_tail - 1) & (KEYBUF_SIZE - 1);
+            keybuf[keybuf_tail] = 0;
+        }
+        return;
+    }
+
+    int next = (keybuf_head + 1) & (KEYBUF_SIZE - 1);
+    if (next != keybuf_tail)
+    {
+        keybuf[keybuf_head] = c;
+        keybuf_head = next;
+    }
+
+    vga_putchar(c, keyboard_color);
+    serial_putchar(c);
+}
+
+int keyboard_readline(char *buf, int max)
+{
+    int idx = 0;
+    while (1)
+    {
+        __asm__("sti; hlt");
+        while (keybuf_tail != keybuf_head)
+        {
+            char c = keybuf[keybuf_tail];
+            keybuf_tail = (keybuf_tail + 1) & (KEYBUF_SIZE - 1);
+
+            if (c == '\n')
+            {
+                buf[idx] = '\0';
+                return idx;
+            }
+            if (c == '\b')
+            {
+                if (idx > 0) idx--;
+            }
+            else if (idx < max - 1)
+            {
+                buf[idx++] = c;
+            }
+        }
+    }
 }

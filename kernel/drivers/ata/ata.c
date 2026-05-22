@@ -1,8 +1,8 @@
 #include "ata.h"
-#include "../../ports.h"
-#include "../serial/serial.h"
-#include "../../block/block.h"
-#include "../../kprintf.h"
+#include "ports.h"
+#include "drivers/serial/serial.h"
+#include "block/block.h"
+#include "kprintf.h"
 #include <stddef.h>
 
 #define TIMEOUT_NS  10000000

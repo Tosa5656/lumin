@@ -3,7 +3,7 @@ all: kernel
 AS = nasm
 CC = x86_64-pc-linux-gnu-gcc
 LD = x86_64-pc-linux-gnu-gcc
-CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zone
+CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zone -I kernel -I os
 LDFLAGS = -m64 -nostdlib -Wl,-T,kernel/kernel.ld,--oformat,binary
 TRUNCATE = truncate
 CAT = cat
@@ -17,32 +17,68 @@ mkdirs:
 bootloader: mkdirs
 	${AS} -f bin arch/x86_64/bootloader.asm -o bin/bootloader.bin
 
-kernel: mkdirs bootloader
-	${AS} -f elf64 kernel/kernel_entry.asm -o obj/kernel_entry.o
-	${AS} -f elf64 kernel/interrupts.asm -o obj/interrupts.o
-	${CC} ${CFLAGS} -c kernel/kernel.c -o obj/kernel.o
-	${CC} ${CFLAGS} -c kernel/drivers/vga/vga.c -o obj/vga.o
-	${CC} ${CFLAGS} -c kernel/drivers/timer/timer.c -o obj/timer.o
-	${CC} ${CFLAGS} -c kernel/drivers/timer/pit.c -o obj/pit.o
-	${CC} ${CFLAGS} -c kernel/drivers/timer/hpet.c -o obj/hpet.o
-	${CC} ${CFLAGS} -c kernel/drivers/timer/lapic.c -o obj/lapic.o
-	${CC} ${CFLAGS} -c kernel/kprintf.c -o obj/kprintf.o
-	${CC} ${CFLAGS} -c kernel/drivers/serial/serial.c -o obj/serial.o
-	${CC} ${CFLAGS} -c kernel/drivers/rtc/rtc.c -o obj/rtc.o
-	${CC} ${CFLAGS} -c kernel/panic.c -o obj/panic.o
-	${CC} ${CFLAGS} -c kernel/acpi.c -o obj/acpi.o
-	${CC} ${CFLAGS} -c kernel/idt.c -o obj/idt.o
-	${CC} ${CFLAGS} -c kernel/keyboard.c -o obj/keyboard.o
-	${CC} ${CFLAGS} -c kernel/mm/pmm.c -o obj/pmm.o
-	${CC} ${CFLAGS} -c kernel/mm/kmalloc.c -o obj/kmalloc.o
-	${CC} ${CFLAGS} -c kernel/drivers/pci/pci.c -o obj/pci.o
-	${CC} ${CFLAGS} -c kernel/drivers/ata/ata.c -o obj/ata.o
-	${CC} ${CFLAGS} -c kernel/block/block.c -o obj/block.o
-	${CC} ${CFLAGS} -c kernel/fs/vfs.c -o obj/vfs.o
-	${CC} ${CFLAGS} -c kernel/fs/fat32.c -o obj/fat32.o
-	${LD} ${LDFLAGS} obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/vga.o obj/kprintf.o obj/serial.o obj/rtc.o obj/panic.o obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o obj/acpi.o obj/idt.o obj/keyboard.o obj/pmm.o obj/kmalloc.o obj/pci.o obj/ata.o obj/block.o obj/vfs.o obj/fat32.o -o bin/kernel.bin
-	${TRUNCATE} -s 48640 bin/kernel.bin
+HDRS = kernel os
 
+# Per-file compile rules
+obj/kernel_entry.o: kernel/kernel_entry.asm
+	${AS} -f elf64 $< -o $@
+
+obj/interrupts.o: kernel/interrupts.asm
+	${AS} -f elf64 $< -o $@
+
+obj/kernel.o: kernel/kernel.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/kprintf.o: kernel/kprintf.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/panic.o: kernel/panic.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/acpi.o: kernel/acpi.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/idt.o: kernel/idt.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/pmm.o: kernel/mm/pmm.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/kmalloc.o: kernel/mm/kmalloc.c
+	${CC} ${CFLAGS} -c $< -o $@
+
+obj/shell.o: os/shell.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/keyboard.o: os/keyboard.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/vga.o: kernel/drivers/vga/vga.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/serial.o: kernel/drivers/serial/serial.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/rtc.o: kernel/drivers/rtc/rtc.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/timer.o: kernel/drivers/timer/timer.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/pit.o: kernel/drivers/timer/pit.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/hpet.o: kernel/drivers/timer/hpet.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/lapic.o: kernel/drivers/timer/lapic.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/pci.o: kernel/drivers/pci/pci.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/ata.o: kernel/drivers/ata/ata.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/block.o: kernel/block/block.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/vfs.o: kernel/fs/vfs.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/fat32.o: kernel/fs/fat32.c
+	${CC} ${CFLAGS} -c $< -o $@
+
+OBJS = obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/kprintf.o \
+       obj/panic.o obj/acpi.o obj/idt.o obj/pmm.o obj/kmalloc.o \
+       obj/shell.o obj/keyboard.o obj/vga.o obj/serial.o obj/rtc.o \
+       obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o \
+       obj/pci.o obj/ata.o obj/block.o obj/vfs.o obj/fat32.o
+
+kernel: mkdirs bootloader $(OBJS)
+	${LD} ${LDFLAGS} $(OBJS) -o bin/kernel.bin
+	${TRUNCATE} -s 56320 bin/kernel.bin
 	${CAT} bin/bootloader.bin bin/kernel.bin > lumin.bin
 
 qemu: kernel

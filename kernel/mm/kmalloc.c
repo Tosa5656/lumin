@@ -1,6 +1,6 @@
 #include "kmalloc.h"
 #include "pmm.h"
-#include "../drivers/serial/serial.h"
+#include "drivers/serial/serial.h"
 
 #define HEAP_ALIGN 16
 #define HEAP_MAGIC 0xDEADBEEF

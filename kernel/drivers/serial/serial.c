@@ -1,7 +1,7 @@
 #include "serial.h"
 #include <stddef.h>
-#include "../../ports.h"
-#include "../../kprintf.h"
+#include "ports.h"
+#include "kprintf.h"
 
 void serial_init(void)
 {

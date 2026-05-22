@@ -1,7 +1,7 @@
 #include "vfs.h"
-#include "../drivers/serial/serial.h"
-#include "../block/block.h"
-#include "../mm/kmalloc.h"
+#include "drivers/serial/serial.h"
+#include "block/block.h"
+#include "mm/kmalloc.h"
 #include <stddef.h>
 
 static struct vfs_file file_table[VFS_FILE_MAX];

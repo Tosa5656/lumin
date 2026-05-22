@@ -2,7 +2,7 @@
 #include "pit.h"
 #include "hpet.h"
 #include "lapic.h"
-#include "../../ports.h"
+#include "ports.h"
 
 static volatile uint64_t ticks;
 static enum timer_type   active = TIMER_NONE;

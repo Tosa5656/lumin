@@ -1,6 +1,6 @@
 #include "fat32.h"
-#include "../drivers/serial/serial.h"
-#include "../mm/kmalloc.h"
+#include "drivers/serial/serial.h"
+#include "mm/kmalloc.h"
 #include <stddef.h>
 
 static void memcpy8(void *dst, const void *src, int n)

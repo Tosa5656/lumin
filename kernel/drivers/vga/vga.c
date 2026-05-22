@@ -1,6 +1,6 @@
 #include "vga.h"
 #include <stddef.h>
-#include "../../kprintf.h"
+#include "kprintf.h"
 
 static int vga_row = 0;
 static int vga_col = 0;
@@ -72,6 +72,16 @@ void vga_write(const char* str, unsigned char color)
 {
     for (int i = 0; str[i] != '\0'; i++)
         vga_putchar(str[i], color);
+}
+
+void vga_backspace(void)
+{
+    if (vga_col > 0)
+    {
+        vga_col--;
+        volatile unsigned short* buf = vga_buffer();
+        buf[vga_row * VGA_WIDTH + vga_col] = vga_entry(' ', vga_entry_color(VGA_LIGHT_GREY, VGA_BLACK));
+    }
 }
 
 void vga_set_cursor(int row, int col)

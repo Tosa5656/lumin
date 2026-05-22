@@ -1,6 +1,6 @@
 #include "hpet.h"
-#include "../mmio.h"
-#include "../../ports.h"
+#include "drivers/mmio.h"
+#include "ports.h"
 
 #define RSDP_SIG "RSD PTR "
 

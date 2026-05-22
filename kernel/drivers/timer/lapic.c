@@ -1,7 +1,7 @@
 #include "lapic.h"
 #include "pit.h"
-#include "../mmio.h"
-#include "../../ports.h"
+#include "drivers/mmio.h"
+#include "ports.h"
 
 #define IA32_APIC_BASE_MSR 0x1B
 #define APIC_ENABLE        (1ULL << 11)

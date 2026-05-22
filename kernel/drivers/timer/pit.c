@@ -1,5 +1,5 @@
 #include "pit.h"
-#include "../../ports.h"
+#include "ports.h"
 
 #define PIT_DATA0    0x40
 #define PIT_CMD      0x43

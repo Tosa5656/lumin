@@ -2,7 +2,7 @@
 #define FAT32_H
 
 #include <stdint.h>
-#include "../block/block.h"
+#include "block/block.h"
 #include "vfs.h"
 
 struct __attribute__((packed)) fat32_bpb {

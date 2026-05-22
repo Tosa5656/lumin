@@ -1,5 +1,5 @@
 #include "block.h"
-#include "../drivers/serial/serial.h"
+#include "drivers/serial/serial.h"
 
 static struct block_device *devices[BLOCK_MAX_DEVS];
 static int device_count;
