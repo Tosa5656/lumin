@@ -7,7 +7,7 @@ _start:
     mov es, ax
 
     mov ah, 0x02
-    mov al, 26
+    mov al, 30
     mov ch, 0
     mov cl, 2
     mov dh, 0
@@ -31,7 +31,7 @@ init_pm:
 
     mov esi, 0x8000
     mov edi, 0x100000
-    mov ecx, 3328
+    mov ecx, 3739
     rep movsd
 
     mov edi, 0x1000
