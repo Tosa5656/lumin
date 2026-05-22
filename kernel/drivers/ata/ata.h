@@ -13,7 +13,8 @@
 
 enum ata_bus { ATA_BUS_PRIMARY = 0, ATA_BUS_SECONDARY };
 
-enum ata_drive_type {
+enum ata_drive_type 
+{
     ATA_NONE,
     ATA_PATA,
     ATA_PATAPI,
@@ -22,11 +23,13 @@ enum ata_drive_type {
     ATA_UNKNOWN
 };
 
-struct ata_identify {
+struct ata_identify
+{
     uint16_t raw[256];
 };
 
-struct ata_device {
+struct ata_device
+{
     enum ata_bus       bus;
     int                drive;
     enum ata_drive_type type;

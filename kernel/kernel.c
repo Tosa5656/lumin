@@ -7,6 +7,7 @@
 #include "mm/kmalloc.h"
 #include "drivers/pci/pci.h"
 #include "drivers/ata/ata.h"
+#include "block/block.h"
 
 unsigned char keyboard_color;
 
@@ -60,21 +61,33 @@ void kmain(void)
                tm.year, tm.month, tm.day,
                tm.hour, tm.minute, tm.second);
 
+    block_init();
+
     int ata_count = ata_init();
-    serial_printf("ATA: %d device(s) found\n", ata_count);
+    serial_printf("block: %d device(s) total\n", block_count());
 
-    if (ata_count > 0)
+    struct partition parts[BLOCK_MAX_PARTS];
+    for (int i = 0; i < block_count(); i++)
     {
-        struct ata_device *dev = ata_get_device(0);
-        if (dev)
-        {
-            serial_printf("ATA: model=%s, sectors=%llu, lba48=%d\n",
-                          dev->model, (unsigned long long)dev->sectors, dev->lba48);
+        struct block_device *bdev = block_get(i);
+        if (!bdev) continue;
+        serial_printf("block[%d]: %s, %llu sectors\n",
+                      i, bdev->name, (unsigned long long)bdev->sector_count);
 
-            uint8_t mbr[512];
-            if (ata_read_sectors(dev, 0, 1, mbr) == 0)
-                serial_printf("ATA: MBR read OK, boot sig=0x%02x%02x\n",
-                              mbr[0x1FF], mbr[0x1FE]);
+        int np = block_parse_mbr(bdev, parts, BLOCK_MAX_PARTS);
+        if (np > 0)
+        {
+            serial_printf("  MBR: %d partition(s)\n", np);
+            for (int p = 0; p < np; p++)
+                serial_printf("  part%d: type=0x%02x start=%llu size=%llu%s\n",
+                              parts[p].index, parts[p].type,
+                              (unsigned long long)parts[p].start_lba,
+                              (unsigned long long)parts[p].sector_count,
+                              parts[p].bootable ? " boot" : "");
+        }
+        else
+        {
+            serial_printf("  no MBR\n");
         }
     }
 
