@@ -368,6 +368,8 @@ int ata_init(void)
     {
         for (int drv = 0; drv < 2; drv++)
         {
+            if (idx >= MAX_DEVICES) break;
+
             struct ata_device *dev = &devices[idx];
             if (ata_detect(bus, drv, dev) == 0 && dev->present)
             {
@@ -410,7 +412,6 @@ int ata_init(void)
                 serial_write("\n");
                 device_count++;
                 idx++;
-                if (idx >= MAX_DEVICES) break;
             }
             else
             {

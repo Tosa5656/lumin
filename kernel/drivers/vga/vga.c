@@ -80,7 +80,7 @@ void vga_backspace(void)
     {
         vga_col--;
         volatile unsigned short* buf = vga_buffer();
-        buf[vga_row * VGA_WIDTH + vga_col] = vga_entry(' ', vga_entry_color(VGA_LIGHT_GREY, VGA_BLACK));
+        buf[vga_row * VGA_WIDTH + vga_col] = vga_entry(' ', vga_default_color);
     }
 }
 

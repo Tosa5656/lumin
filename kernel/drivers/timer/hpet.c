@@ -1,5 +1,5 @@
 #include "hpet.h"
-#include "acpi_common.h"
+#include "drivers/acpi/acpi_common.h"
 #include "drivers/mmio.h"
 #include "ports.h"
 
@@ -102,9 +102,9 @@ int hpet_init(uint32_t hz)
     if (comp == 0)
         return -1;
 
-    hpet_base[HPET_GEN_CONF / 8] = 1;
+    hpet_base[HPET_GEN_CONF / 8] = 3;
 
-    hpet_base[HPET_T0_CONF / 8] = (1 << 0) | (1 << 2) | (1 << 3);
+    hpet_base[HPET_T0_CONF / 8] = (1 << 2) | (1 << 4);
 
     uint64_t main_cnt = hpet_base[HPET_MAIN_CNT / 8];
     hpet_base[HPET_T0_COMP / 8] = main_cnt + comp;

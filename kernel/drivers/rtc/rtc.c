@@ -20,15 +20,28 @@ int rtc_read(struct rtc_time *tm)
     uint8_t statusB = cmos_read(0x0B);
     int binary = statusB & 0x04;
 
-    while (cmos_read(0x0A) & 0x80);
+    int second, minute, hour, day, month, year, century;
 
-    int second = cmos_read(0x00);
-    int minute = cmos_read(0x02);
-    int hour   = cmos_read(0x04);
-    int day    = cmos_read(0x07);
-    int month  = cmos_read(0x08);
-    int year   = cmos_read(0x09);
-    int century= cmos_read(0x32);
+    for (int retry = 0; retry < 3; retry++)
+    {
+        while (cmos_read(0x0A) & 0x80);
+
+        second = cmos_read(0x00);
+        minute = cmos_read(0x02);
+        hour   = cmos_read(0x04);
+        day    = cmos_read(0x07);
+        month  = cmos_read(0x08);
+        year   = cmos_read(0x09);
+        century= cmos_read(0x32);
+
+        if (!(cmos_read(0x0A) & 0x80))
+        {
+            int s2 = cmos_read(0x00);
+            int m2 = cmos_read(0x02);
+            if (s2 == second && m2 == minute)
+                break;
+        }
+    }
 
     outb(CMOS_INDEX, 0x00);
 

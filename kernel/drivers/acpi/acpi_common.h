@@ -53,7 +53,14 @@ static inline struct rsdp_t *rsdp_find(void)
         {
             struct rsdp_t *rsdp = (struct rsdp_t *)(uint64_t)addr;
             if (acpi_checksum(rsdp, 20) == 0)
+            {
+                if (rsdp->revision >= 2)
+                {
+                    if (acpi_checksum(rsdp, sizeof(struct rsdp_t)) != 0)
+                        continue;
+                }
                 return rsdp;
+            }
         }
     }
     return NULL;

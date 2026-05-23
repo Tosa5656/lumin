@@ -12,7 +12,7 @@
 #include "fs/fat32.h"
 #include "keyboard.h"
 #include "shell.h"
-#include "acpi.h"
+#include "drivers/acpi/acpi.h"
 
 unsigned char keyboard_color;
 

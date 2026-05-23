@@ -44,6 +44,7 @@ init_pm:
     mov ds, ax
     mov ss, ax
     mov es, ax
+    mov esp, 0x90000
 
     mov esi, 0x8000
     mov edi, 0x100000

@@ -1028,17 +1028,8 @@ int fat32_create_file(struct fat32_fs *fs, uint32_t dir_cluster,
     int lfn_count = 0;
     build_lfn_entries(name, name_len, lfns, &lfn_count);
 
-    /* allocate first cluster (0 means empty file) */
-    uint32_t first_cluster = fat_alloc_cluster(fs);
-    if (first_cluster >= FAT32_EOC)
-        return -1;
-
-    /* zero out the new cluster */
-    uint8_t zero[512];
-    for (int i = 0; i < 512; i++) zero[i] = 0;
-    uint32_t first_sector = fs->data_start + (first_cluster - 2) * fs->bpb.sectors_per_cluster;
-    for (uint32_t s = 0; s < fs->bpb.sectors_per_cluster; s++)
-        block_write(fs->bdev, first_sector + s, 1, zero);
+    /* empty file: no cluster allocated (cluster = 0 means empty) */
+    uint32_t first_cluster = 0;
 
     /* build the directory entry */
     struct fat32_dent dent;
@@ -1055,12 +1046,8 @@ int fat32_create_file(struct fat32_fs *fs, uint32_t dir_cluster,
     dent.cluster_lo = first_cluster & 0xFFFF;
     dent.size = 0;
 
-    /* write entries to directory */
     if (dir_write_entries(fs, dir_cluster, lfn_count, lfns, &dent, checksum) != 0)
-    {
-        fat_free_chain(fs, first_cluster);
         return -1;
-    }
 
     if (out_cluster)
         *out_cluster = first_cluster;

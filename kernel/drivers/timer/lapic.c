@@ -59,10 +59,18 @@ static uint64_t calibrate(uint32_t hz)
     lapic_write(LAPIC_TIMER_INIT, 0xFFFFFFFF);
 
     uint64_t start = pit_get_ticks();
-    while (pit_get_ticks() - start < 5);
+    uint64_t timeout = start + 100;
+    while (pit_get_ticks() - start < 5)
+    {
+        if (pit_get_ticks() > timeout)
+            return 0;
+        __asm__ volatile("pause");
+    }
 
     uint32_t curr = lapic_read(LAPIC_TIMER_CURR);
     uint32_t elapsed_ticks = 0xFFFFFFFF - curr;
+    if (elapsed_ticks == 0)
+        return 0;
 
     uint64_t lapic_hz = (uint64_t)elapsed_ticks * 200;
     return lapic_hz / hz;

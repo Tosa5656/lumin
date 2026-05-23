@@ -1,8 +1,34 @@
 #include "acpi.h"
 #include "acpi_common.h"
 #include "ports.h"
+#include "mm/pmm.h"
 #include <stdint.h>
 #include <stddef.h>
+
+static volatile uint64_t *ensure_mapped(uint64_t phys)
+{
+    if (phys >= 0x200000)
+    {
+        uint64_t aligned = phys & ~0x1FFFFFULL;
+        uint64_t entry   = aligned | 0x83;
+        volatile uint64_t *pdp = (volatile uint64_t *)0x2000;
+        volatile uint64_t *pml4 = (volatile uint64_t *)0x1000;
+        int pdp_idx = (int)((aligned >> 30) & 0x1FF);
+        int pd_idx  = (int)((aligned >> 21) & 0x1FF);
+        if (!(pdp[pdp_idx] & 1))
+        {
+            uint64_t pd_page = (uint64_t)pmm_alloc();
+            volatile uint64_t *pd = (volatile uint64_t *)pd_page;
+            for (int i = 0; i < 512; i++)
+                pd[i] = 0;
+            pdp[pdp_idx] = pd_page | 3;
+        }
+        volatile uint64_t *pd2 = (volatile uint64_t *)(pdp[pdp_idx] & ~0xFFFULL);
+        pd2[pd_idx] = entry;
+        __asm__ volatile("invlpg (%0)" : : "r"(phys) : "memory");
+    }
+    return (volatile uint64_t *)(uint64_t)phys;
+}
 
 struct __attribute__((packed)) fadt_t {
     struct sdt_t h;
@@ -48,29 +74,48 @@ struct __attribute__((packed)) fadt_t {
     uint8_t      reset_value;
 };
 
-static struct fadt_t *fadt_find(struct rsdp_t *rsdp)
+static struct sdt_t *find_sdt(struct rsdp_t *rsdp, const char sig[4])
 {
-    uint32_t rsdt_addr = rsdp->rsdt_addr;
-    struct sdt_t *rsdt = (struct sdt_t *)(uint64_t)rsdt_addr;
-    uint32_t *entries = (uint32_t *)((uint64_t)rsdt_addr + sizeof(struct sdt_t));
-    uint32_t num = (rsdt->length - sizeof(struct sdt_t)) / 4;
+    uint32_t num;
+    uint32_t *entries32 = NULL;
+    uint64_t *entries64 = NULL;
+
+    if (rsdp->revision >= 2 && rsdp->xsdt_addr)
+    {
+        uint64_t xsdt_addr = rsdp->xsdt_addr;
+        ensure_mapped(xsdt_addr);
+        struct sdt_t *xsdt = (struct sdt_t *)(uint64_t)xsdt_addr;
+        ensure_mapped(xsdt_addr + xsdt->length);
+        num = (xsdt->length - sizeof(struct sdt_t)) / 8;
+        entries64 = (uint64_t *)((uint64_t)xsdt_addr + sizeof(struct sdt_t));
+    }
+    else
+    {
+        uint32_t rsdt_addr = rsdp->rsdt_addr;
+        if (!rsdt_addr) return NULL;
+        ensure_mapped(rsdt_addr);
+        struct sdt_t *rsdt = (struct sdt_t *)(uint64_t)rsdt_addr;
+        ensure_mapped(rsdt_addr + rsdt->length);
+        num = (rsdt->length - sizeof(struct sdt_t)) / 4;
+        entries32 = (uint32_t *)((uint64_t)rsdt_addr + sizeof(struct sdt_t));
+    }
 
     for (uint32_t i = 0; i < num; i++)
     {
-        struct sdt_t *tbl = (struct sdt_t *)(uint64_t)entries[i];
-        if (tbl->signature[0] == 'F' && tbl->signature[1] == 'A' &&
-            tbl->signature[2] == 'C' && tbl->signature[3] == 'P')
-            return (struct fadt_t *)tbl;
+        uint64_t tbl_addr = entries64 ? entries64[i] : entries32[i];
+        if (!tbl_addr) continue;
+        ensure_mapped(tbl_addr);
+        struct sdt_t *tbl = (struct sdt_t *)(uint64_t)tbl_addr;
+        if (tbl->signature[0] == sig[0] && tbl->signature[1] == sig[1] &&
+            tbl->signature[2] == sig[2] && tbl->signature[3] == sig[3])
+            return tbl;
     }
     return NULL;
 }
 
-// Ищет \_S5 в DSDT и достаёт SLP_TYPa, SLP_TYPb
-// AML: Name(_S5_, Package() { SLP_TYPa, SLP_TYPb, ... })
 static int parse_s5(const uint8_t *dsdt, uint32_t dsdt_len,
                     uint16_t *slp_typa, uint16_t *slp_typb)
 {
-    // Ищем \_S5_ : 0x5C 0x5F 0x53 0x35 0x5F
     for (uint32_t i = 0; i < dsdt_len - 5; i++)
     {
         if (dsdt[i] != 0x5C) continue;
@@ -78,61 +123,53 @@ static int parse_s5(const uint8_t *dsdt, uint32_t dsdt_len,
             dsdt[i+3] != 0x35 || dsdt[i+4] != 0x5F)
             continue;
 
-        // Дальше идёт NameOp (0x08) + value
         uint32_t pos = i + 5;
         if (dsdt[pos] != 0x08)
             continue;
         pos++;
 
-        // PackageOp (0x12)
         if (dsdt[pos] != 0x12)
             continue;
         pos++;
 
-        // PkgLength (может быть 1-4 байта)
-        uint32_t pkg_len = dsdt[pos] & 0x3F;
-        if (dsdt[pos] & 0x80)
+        uint8_t lead = dsdt[pos];
+        uint32_t pkg_len = lead & 0x0F;
+        uint32_t nbytes = (lead >> 4) & 0x03;
+        pos++;
+        for (uint32_t j = 0; j < nbytes; j++)
         {
-            int nbytes = dsdt[pos] & 0x0F;
-            if (nbytes == 0) { pos += 2; }
-            else { pos += nbytes + 1; }
-        }
-        else
-        {
+            pkg_len |= (uint32_t)dsdt[pos] << (4 + j * 8);
             pos++;
         }
 
-        // NumElements (1 байт после PkgLength)
         int num_elem = dsdt[pos];
         pos++;
 
         if (num_elem < 2)
             continue;
 
-        // SLP_TYPa
-        if (dsdt[pos] == 0x0A)        // ByteConst
+        if (dsdt[pos] == 0x0A)
         {
             *slp_typa = dsdt[pos+1];
             pos += 2;
         }
-        else if (dsdt[pos] == 0x0B)   // WordConst
+        else if (dsdt[pos] == 0x0B)
         {
             *slp_typa = dsdt[pos+1] | (dsdt[pos+2] << 8);
             pos += 3;
         }
-        else if (dsdt[pos] == 0x00)   // ZeroOp
+        else if (dsdt[pos] == 0x00)
         {
             *slp_typa = 0;
             pos += 1;
         }
-        else if (dsdt[pos] == 0x01)   // OneOp
+        else if (dsdt[pos] == 0x01)
         {
             *slp_typa = 1;
             pos += 1;
         }
         else { continue; }
 
-        // SLP_TYPb
         if (dsdt[pos] == 0x0A)
         {
             *slp_typb = dsdt[pos+1];
@@ -163,25 +200,28 @@ void acpi_shutdown(void)
     struct rsdp_t *rsdp = rsdp_find();
     if (!rsdp) goto halt;
 
-    struct fadt_t *fadt = fadt_find(rsdp);
-    if (!fadt) goto halt;
+    struct sdt_t *fadt_sdt = find_sdt(rsdp, "FACP");
+    if (!fadt_sdt) goto halt;
 
+    struct fadt_t *fadt = (struct fadt_t *)fadt_sdt;
     uint32_t pm1a_cnt = fadt->pm1a_cnt_blk;
     uint32_t pm1b_cnt = fadt->pm1b_cnt_blk;
 
-    // Парсим SLP_TYP из DSDT
     uint16_t slp_typa = 0x07;
     uint16_t slp_typb = 0x07;
 
-    struct sdt_t *dsdt_hdr = (struct sdt_t *)(uint64_t)fadt->dsdt;
-    if (dsdt_hdr && acpi_checksum(dsdt_hdr, dsdt_hdr->length) == 0)
+    uint32_t dsdt_addr = fadt->dsdt;
+    if (dsdt_addr)
     {
-        const uint8_t *dsdt_data = (const uint8_t *)dsdt_hdr;
-        uint32_t dsdt_len = dsdt_hdr->length;
-        parse_s5(dsdt_data, dsdt_len, &slp_typa, &slp_typb);
+        ensure_mapped(dsdt_addr);
+        struct sdt_t *dsdt_hdr = (struct sdt_t *)(uint64_t)dsdt_addr;
+        if (acpi_checksum(dsdt_hdr, dsdt_hdr->length) == 0)
+        {
+            parse_s5((const uint8_t *)dsdt_hdr, dsdt_hdr->length,
+                     &slp_typa, &slp_typb);
+        }
     }
 
-    // SLP_EN (bit 13) | SLP_TYPx (bits 10-12)
     if (pm1a_cnt)
         outw((uint16_t)pm1a_cnt, (slp_typa << 10) | (1 << 13));
     if (pm1b_cnt)

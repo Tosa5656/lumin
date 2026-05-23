@@ -29,12 +29,7 @@ static inline void mmio_map_2mb(uint64_t phys_addr)
             pd[i] = 0;
 
         pdp[pdp_idx] = pd_page | PAGE_PRESENT | PAGE_WRITE;
-
-        __asm__ volatile("invlpg (%0)" : : "r"(aligned) : "memory");
     }
-
-    int pdp_idx_check = (int)((aligned >> 30) & 0x1FF);
-    (void)pdp_idx_check;
 
     volatile uint64_t *pd2 = (volatile uint64_t *)(pdp[pdp_idx] & ~0xFFFULL);
     pd2[pd_idx] = entry;

@@ -32,7 +32,7 @@ obj/kprintf.o: kernel/kprintf.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/panic.o: kernel/panic.c
 	${CC} ${CFLAGS} -c $< -o $@
-obj/acpi.o: kernel/acpi.c
+obj/acpi.o: kernel/drivers/acpi/acpi.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/idt.o: kernel/idt.c
 	${CC} ${CFLAGS} -c $< -o $@
