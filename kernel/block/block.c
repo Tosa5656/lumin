@@ -139,14 +139,20 @@ int block_parse_mbr(struct block_device *dev, struct partition *parts, int max_p
     int count = 0;
     for (int i = 0; i < 4 && count < max_parts; i++)
     {
-        if (m->parts[i].type == 0)
+        uint32_t lba  = m->parts[i].lba_first;
+        uint32_t cnt  = m->parts[i].sector_count;
+        uint8_t  type = m->parts[i].type;
+
+        if (type == 0 || lba == 0 || cnt == 0)
+            continue;
+        if ((uint64_t)lba + cnt > dev->sector_count)
             continue;
 
         parts[count].index       = i + 1;
-        parts[count].type        = m->parts[i].type;
+        parts[count].type        = type;
         parts[count].bootable    = (m->parts[i].status & 0x80) ? 1 : 0;
-        parts[count].start_lba   = m->parts[i].lba_first;
-        parts[count].sector_count = m->parts[i].sector_count;
+        parts[count].start_lba   = lba;
+        parts[count].sector_count = cnt;
         parts[count].parent      = dev;
         parts[count].dev.private = &parts[count];
         parts[count].dev.ops     = &part_ops;

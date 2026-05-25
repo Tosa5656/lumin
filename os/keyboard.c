@@ -6,6 +6,7 @@
 extern unsigned char keyboard_color;
 
 static int shift_pressed;
+static int ctrl_pressed;
 static int caps_locked;
 
 /* ring buffer for ISR */
@@ -68,6 +69,16 @@ void keyboard_handler(void)
         shift_pressed = 0;
         return;
     }
+    if (scancode == 0x1D)
+    {
+        ctrl_pressed = 1;
+        return;
+    }
+    if (scancode == 0x9D)
+    {
+        ctrl_pressed = 0;
+        return;
+    }
     if (scancode == 0x3A)
     {
         caps_locked = !caps_locked;
@@ -92,7 +103,15 @@ void keyboard_handler(void)
     else
         c = keymap[scancode];
 
-    if (!c) return;
+    if (ctrl_pressed && c >= 'a' && c <= 'z')
+        c &= 0x1F;
+    if (ctrl_pressed && c >= 'A' && c <= 'Z')
+        c &= 0x1F;
+
+    if (scancode == 0x0E)
+        c = '\b';
+    else if (!c)
+        return;
 
     int next = (keybuf_head + 1) & (KEYBUF_SIZE - 1);
     if (next != keybuf_tail)
@@ -116,11 +135,22 @@ int keyboard_readline(char *buf, int max)
             if (c == '\n')
             {
                 buf[idx] = '\0';
+                vga_putchar('\n', keyboard_color);
+                serial_putchar('\n');
                 return idx;
             }
             if (c == '\b')
             {
                 if (idx > 0)
+                {
+                    idx--;
+                    vga_backspace();
+                    serial_write("\b \b");
+                }
+            }
+            else if (c == 0x15)
+            {
+                while (idx > 0)
                 {
                     idx--;
                     vga_backspace();

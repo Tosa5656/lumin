@@ -2,6 +2,7 @@
 #include "keyboard.h"
 #include "drivers/vga/vga.h"
 #include "drivers/serial/serial.h"
+#include "drivers/acpi/acpi.h"
 #include "fs/vfs.h"
 #include "mm/kmalloc.h"
 #include <stddef.h>
@@ -9,6 +10,24 @@
 
 #define MAX_ARGS 16
 #define LINE_MAX 256
+
+#define CWD "/mnt"
+
+static const char *resolve_path(const char *path, char *buf, int bufsz)
+{
+    if (!path)
+        return CWD;
+    if (path[0] == '/')
+        return path;
+    int n;
+    for (n = 0; CWD[n] && n < bufsz - 2; n++)
+        buf[n] = CWD[n];
+    buf[n++] = '/';
+    while (*path && n < bufsz - 1)
+        buf[n++] = *path++;
+    buf[n] = '\0';
+    return buf;
+}
 
 static void print(const char *s)
 {
@@ -73,7 +92,11 @@ static void cmd_help(void)
 
 static void cmd_ls(char *path)
 {
-    if (!path) path = "/";
+    char buf[VFS_PATH_MAX];
+    if(path != NULL)
+        path = (char *)resolve_path(path, buf, sizeof(buf));
+    else
+        path = (char *)CWD;
     struct vfs_dentry de;
     int found = 0;
     for (int i = 0; vfs_readdir(path, i, &de) == 0; i++)
@@ -95,6 +118,8 @@ static void cmd_ls(char *path)
 static void cmd_cat(char *path)
 {
     if (!path) { println("usage: cat <path>"); return; }
+    char rbuf[VFS_PATH_MAX];
+    path = (char *)resolve_path(path, rbuf, sizeof(rbuf));
     struct vfs_file *f = vfs_open(path, VFS_O_READ);
     if (!f) { println("cat: open failed"); return; }
 
@@ -113,6 +138,8 @@ static void cmd_cat(char *path)
 static void cmd_create(char *path)
 {
     if (!path) { println("usage: create <path>"); return; }
+    char buf[VFS_PATH_MAX];
+    path = (char *)resolve_path(path, buf, sizeof(buf));
     if (vfs_create(path) == 0)
         serial_printf("shell: created '%s'\n", path);
     else
@@ -122,7 +149,8 @@ static void cmd_create(char *path)
 static void cmd_write(int argc, char **argv)
 {
     if (argc < 2) { println("usage: write <path> <text>"); return; }
-    char *path = argv[0];
+    char rbuf[VFS_PATH_MAX];
+    char *path = (char *)resolve_path(argv[0], rbuf, sizeof(rbuf));
     char *text = argv[1];
 
     struct vfs_file *f = vfs_open(path, VFS_O_WRITE);
@@ -138,6 +166,8 @@ static void cmd_write(int argc, char **argv)
 static void cmd_rm(char *path)
 {
     if (!path) { println("usage: rm <path>"); return; }
+    char buf[VFS_PATH_MAX];
+    path = (char *)resolve_path(path, buf, sizeof(buf));
     if (vfs_unlink(path) == 0)
         serial_printf("shell: removed '%s'\n", path);
     else
@@ -147,6 +177,8 @@ static void cmd_rm(char *path)
 static void cmd_mkdir(char *path)
 {
     if (!path) { println("usage: mkdir <path>"); return; }
+    char buf[VFS_PATH_MAX];
+    path = (char *)resolve_path(path, buf, sizeof(buf));
     if (vfs_mkdir(path) == 0)
         serial_printf("shell: mkdir '%s'\n", path);
     else
@@ -156,6 +188,8 @@ static void cmd_mkdir(char *path)
 static void cmd_stat(char *path)
 {
     if (!path) { println("usage: stat <path>"); return; }
+    char buf[VFS_PATH_MAX];
+    path = (char *)resolve_path(path, buf, sizeof(buf));
     struct vfs_dentry de;
     if (vfs_stat(path, &de) != 0)
     {
@@ -187,7 +221,8 @@ void shell_run(void)
 
     while (1)
     {
-        print("$ ");
+        print(CWD);
+        print(" $ ");
 
         int len = keyboard_readline(line, LINE_MAX);
         (void)len;
@@ -198,7 +233,7 @@ void shell_run(void)
         if (strcmp(argv[0], "help") == 0)
             cmd_help();
         else if (strcmp(argv[0], "ls") == 0)
-            cmd_ls(argv[1]);
+            cmd_ls(argc > 1 ? argv[1] : NULL);
         else if (strcmp(argv[0], "cat") == 0)
             cmd_cat(argv[1]);
         else if (strcmp(argv[0], "create") == 0)
@@ -213,6 +248,8 @@ void shell_run(void)
             cmd_stat(argv[1]);
         else if (strcmp(argv[0], "echo") == 0)
             cmd_echo(argc - 1, argv + 1);
+        else if (strcmp(argv[0], "shutdown") == 0)
+            acpi_shutdown();
         else
         {
             print(argv[0]);

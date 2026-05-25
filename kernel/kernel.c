@@ -12,7 +12,6 @@
 #include "fs/fat32.h"
 #include "keyboard.h"
 #include "shell.h"
-#include "drivers/acpi/acpi.h"
 
 unsigned char keyboard_color;
 
@@ -25,10 +24,6 @@ static const char *timer_name(enum timer_type t)
         case TIMER_LAPIC: return "LAPIC";
         default:          return "NONE";
     }
-}
-
-void Quit(void) {
-    acpi_shutdown();
 }
 
 void kmain(void)
@@ -103,11 +98,19 @@ void kmain(void)
     {
         struct block_device *pbdev = block_partition_get(pi);
         if (!pbdev) continue;
+        serial_printf("fat32: trying partition %s (type=0x%02x, LBA=%llu)\n",
+                      pbdev->name,
+                      ((struct partition *)pbdev->private)->type,
+                      (unsigned long long)((struct partition *)pbdev->private)->start_lba);
 
         if (vfs_mount_fat32("/mnt", pbdev) == 0)
         {
             serial_printf("fat32: mounted partition %s at /mnt\n", pbdev->name);
             fat32_mounted = 1;
+        }
+        else
+        {
+            serial_printf("fat32: partition %s mount FAILED\n", pbdev->name);
         }
     }
 
@@ -115,11 +118,16 @@ void kmain(void)
     {
         struct block_device *raw = block_get(bi);
         if (!raw) continue;
+        serial_printf("fat32: trying raw device %s\n", raw->name);
 
         if (vfs_mount_fat32("/mnt", raw) == 0)
         {
             serial_printf("fat32: mounted raw device %s at /mnt\n", raw->name);
             fat32_mounted = 1;
+        }
+        else
+        {
+            serial_printf("fat32: raw device %s mount FAILED\n", raw->name);
         }
     }
 
@@ -152,6 +160,4 @@ void kmain(void)
 
     serial_write("shell: starting...\n");
     shell_run();
-
-    Quit();
 }
