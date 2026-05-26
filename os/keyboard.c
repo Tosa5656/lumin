@@ -8,6 +8,7 @@ extern unsigned char keyboard_color;
 static int shift_pressed;
 static int ctrl_pressed;
 static int caps_locked;
+static int extended;
 
 /* ring buffer for ISR */
 static volatile char keybuf[KEYBUF_SIZE];
@@ -85,6 +86,33 @@ void keyboard_handler(void)
         return;
     }
 
+    if (scancode == 0xE0)
+    {
+        extended = 1;
+        return;
+    }
+    if (extended)
+    {
+        extended = 0;
+        if (scancode & 0x80) return;
+        char special = 0;
+        if (scancode == 0x48) special = KEY_UP;
+        else if (scancode == 0x50) special = KEY_DOWN;
+        else if (scancode == 0x4B) special = KEY_LEFT;
+        else if (scancode == 0x4D) special = KEY_RIGHT;
+        else if (scancode == 0x47) special = KEY_HOME;
+        else if (scancode == 0x4F) special = KEY_END;
+        else if (scancode == 0x53) special = KEY_DEL;
+        if (!special) return;
+        int next = (keybuf_head + 1) & (KEYBUF_SIZE - 1);
+        if (next != keybuf_tail)
+        {
+            keybuf[keybuf_head] = special;
+            keybuf_head = next;
+        }
+        return;
+    }
+
     if (scancode & 0x80)
         return;
 
@@ -121,46 +149,300 @@ void keyboard_handler(void)
     }
 }
 
+static int hist_strcmp(const char *a, const char *b)
+{
+    while (*a && *b && *a == *b) { a++; b++; }
+    return (unsigned char)*a - (unsigned char)*b;
+}
+
+/* tab-completion hook (set by shell) */
+static tab_complete_fn tab_complete_hook;
+
+void keyboard_set_tab_complete(tab_complete_fn fn)
+{
+    tab_complete_hook = fn;
+}
+
+/* helper: redraw the input line on VGA starting from (row,col).
+   also moves hardware cursor to the correct position. */
+static void vga_redraw_line(const char *buf, int idx, int cursor,
+                            int start_row, int start_col)
+{
+    volatile unsigned short *vga_buf = (volatile unsigned short *)VGA_ADDRESS;
+    unsigned char color = keyboard_color;
+
+    /* compute the first position that needs clearing —
+       anything after buf[idx-1] up to the end of the visible region
+       left by a previous longer line.  We clear up to (start_row,end_row)
+       by comparison of current vs old line length.
+       The simplest robust approach: write the line, then figure
+       out where we ended up and write spaces for the rest of
+       the current screen line if needed. */
+
+    int r = start_row;
+    int c = start_col;
+
+    /* write the buffer */
+    for (int i = 0; i < idx; i++)
+    {
+        vga_buf[r * VGA_WIDTH + c] = vga_entry((unsigned char)buf[i], color);
+        if (++c == VGA_WIDTH) { c = 0; r++; }
+    }
+
+    /* clear the rest of the current row (safest – avoids leftover chars) */
+    while (r * VGA_WIDTH + c < (start_row * VGA_WIDTH + start_col + idx + 256)
+           && r < VGA_HEIGHT)
+    {
+        vga_buf[r * VGA_WIDTH + c] = vga_entry(' ', color);
+        if (++c == VGA_WIDTH) { c = 0; r++; }
+        /* stop after one extra screen of clearing */
+        if (r * VGA_WIDTH + c >= start_row * VGA_WIDTH + start_col + VGA_WIDTH * 2)
+            break;
+    }
+
+    /* place cursor */
+    {
+        int cr = start_row + (start_col + cursor) / VGA_WIDTH;
+        int cc = (start_col + cursor) % VGA_WIDTH;
+        if (cr >= VGA_HEIGHT) { cr = VGA_HEIGHT - 1; cc = VGA_WIDTH - 1; }
+        vga_set_cursor(cr, cc);
+    }
+}
+
+/* helper: send buf characters to serial for echo */
+static void serial_echo_line(const char *buf, int idx)
+{
+    for (int i = 0; i < idx; i++)
+        serial_putchar(buf[i]);
+}
+
 int keyboard_readline(char *buf, int max)
 {
+    static char history[HISTORY_MAX][256];
+    static int hist_count = 0;
+
+    char saved[256];
+    int saved_len = 0;
+    int browsing = -1;
     int idx = 0;
+    int cursor = 0;
+    int start_row, start_col;
+
+    vga_get_cursor(&start_row, &start_col);
+
     while (1)
     {
         __asm__("sti; hlt");
         while (keybuf_tail != keybuf_head)
         {
-            char c = keybuf[keybuf_tail];
+            unsigned char c = (unsigned char)keybuf[keybuf_tail];
             keybuf_tail = (keybuf_tail + 1) & (KEYBUF_SIZE - 1);
 
+            /* ---------- Enter ---------- */
             if (c == '\n')
             {
                 buf[idx] = '\0';
                 vga_putchar('\n', keyboard_color);
                 serial_putchar('\n');
+
+                if (idx > 0 && (hist_count == 0 ||
+                    hist_strcmp(history[hist_count - 1], buf) != 0))
+                {
+                    if (hist_count == HISTORY_MAX)
+                    {
+                        for (int i = 1; i < HISTORY_MAX; i++)
+                            for (int j = 0; j < 256; j++)
+                                history[i - 1][j] = history[i][j];
+                        hist_count--;
+                    }
+                    int i;
+                    for (i = 0; i < idx && i < 256 - 1; i++)
+                        history[hist_count][i] = buf[i];
+                    history[hist_count][i] = '\0';
+                    hist_count++;
+                }
                 return idx;
             }
+
+            /* ---------- Backspace ---------- */
             if (c == '\b')
+            {
+                if (cursor > 0)
+                {
+                    int shift = idx - cursor;
+                    for (int i = 0; i < shift; i++)
+                        buf[cursor - 1 + i] = buf[cursor + i];
+                    idx--;
+                    cursor--;
+                    vga_redraw_line(buf, idx, cursor, start_row, start_col);
+                    serial_write("\b \b");
+                }
+                continue;
+            }
+
+            /* ---------- Delete ---------- */
+            if (c == KEY_DEL)
+            {
+                if (cursor < idx)
+                {
+                    int shift = idx - cursor - 1;
+                    for (int i = 0; i < shift; i++)
+                        buf[cursor + i] = buf[cursor + 1 + i];
+                    idx--;
+                    vga_redraw_line(buf, idx, cursor, start_row, start_col);
+                }
+                continue;
+            }
+
+            /* ---------- Ctrl-U: clear line ---------- */
+            if (c == 0x15)
             {
                 if (idx > 0)
                 {
-                    idx--;
-                    vga_backspace();
+                    idx = 0;
+                    cursor = 0;
+                    vga_redraw_line(buf, idx, cursor, start_row, start_col);
                     serial_write("\b \b");
                 }
+                continue;
             }
-            else if (c == 0x15)
+
+            /* ---------- Cursor movement ---------- */
+            if (c == KEY_LEFT)
             {
-                while (idx > 0)
+                if (cursor > 0)
                 {
-                    idx--;
-                    vga_backspace();
-                    serial_write("\b \b");
+                    cursor--;
+                    int r = start_row + (start_col + cursor) / VGA_WIDTH;
+                    int col = (start_col + cursor) % VGA_WIDTH;
+                    vga_set_cursor(r, col);
                 }
+                continue;
             }
-            else if (idx < max - 1)
+
+            if (c == KEY_RIGHT)
             {
-                buf[idx++] = c;
-                vga_putchar(c, keyboard_color);
+                if (cursor < idx)
+                {
+                    cursor++;
+                    int r = start_row + (start_col + cursor) / VGA_WIDTH;
+                    int col = (start_col + cursor) % VGA_WIDTH;
+                    vga_set_cursor(r, col);
+                }
+                continue;
+            }
+
+            if (c == KEY_HOME)
+            {
+                cursor = 0;
+                vga_set_cursor(start_row, start_col);
+                continue;
+            }
+
+            if (c == KEY_END)
+            {
+                cursor = idx;
+                {
+                    int r = start_row + (start_col + cursor) / VGA_WIDTH;
+                    int col = (start_col + cursor) % VGA_WIDTH;
+                    vga_set_cursor(r, col);
+                }
+                continue;
+            }
+
+            /* ---------- Tab completion ---------- */
+            if (c == '\t')
+            {
+                if (tab_complete_hook)
+                {
+                    int result = tab_complete_hook(buf, &cursor, idx, max);
+                    if (result > 0)
+                    {
+                        idx = cursor; /* cursor is also the new length */
+                        vga_redraw_line(buf, idx, cursor, start_row, start_col);
+                    }
+                }
+                continue;
+            }
+
+            /* ---------- History UP ---------- */
+            if (c == KEY_UP)
+            {
+                if (hist_count == 0) continue;
+
+                if (browsing == -1)
+                {
+                    for (int i = 0; i < idx && i < 255; i++) saved[i] = buf[i];
+                    saved[idx] = '\0';
+                    saved_len = idx;
+                    browsing = hist_count - 1;
+                }
+                else if (browsing > 0)
+                {
+                    browsing--;
+                }
+                else
+                {
+                    continue;
+                }
+
+                const char *h = history[browsing];
+                idx = 0;
+                while (h[idx] && idx < max - 1)
+                {
+                    buf[idx] = h[idx];
+                    idx++;
+                }
+                cursor = idx;
+                vga_redraw_line(buf, idx, cursor, start_row, start_col);
+                serial_write("\r");
+                serial_echo_line(buf, idx);
+                continue;
+            }
+
+            /* ---------- History DOWN ---------- */
+            if (c == KEY_DOWN)
+            {
+                if (browsing == -1) continue;
+
+                if (browsing < hist_count - 1)
+                {
+                    browsing++;
+                    const char *h = history[browsing];
+                    idx = 0;
+                    while (h[idx] && idx < max - 1)
+                    {
+                        buf[idx] = h[idx];
+                        idx++;
+                    }
+                }
+                else
+                {
+                    browsing = -1;
+                    idx = 0;
+                    while (saved[idx] && idx < max - 1)
+                    {
+                        buf[idx] = saved[idx];
+                        idx++;
+                    }
+                }
+                cursor = idx;
+                vga_redraw_line(buf, idx, cursor, start_row, start_col);
+                serial_write("\r");
+                serial_echo_line(buf, idx);
+                continue;
+            }
+
+            /* ---------- Regular character — insert at cursor ---------- */
+            if (idx < max - 1)
+            {
+                /* shift characters right from cursor to make room */
+                for (int i = idx; i > cursor; i--)
+                    buf[i] = buf[i - 1];
+                buf[cursor] = c;
+                idx++;
+                cursor++;
+                vga_redraw_line(buf, idx, cursor, start_row, start_col);
                 serial_putchar(c);
             }
         }

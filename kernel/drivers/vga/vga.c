@@ -1,4 +1,5 @@
 #include "vga.h"
+#include "ports.h"
 #include <stddef.h>
 #include "kprintf.h"
 
@@ -21,10 +22,20 @@ static void vga_scroll(void)
     vga_row = VGA_HEIGHT - 1;
 }
 
+static void vga_sync_cursor(void)
+{
+    uint16_t pos = (uint16_t)(vga_row * VGA_WIDTH + vga_col);
+    outb(0x3D4, 0x0E);
+    outb(0x3D5, (uint8_t)(pos >> 8));
+    outb(0x3D4, 0x0F);
+    outb(0x3D5, (uint8_t)(pos & 0xFF));
+}
+
 void vga_init(void)
 {
     vga_row = 0;
     vga_col = 0;
+    vga_sync_cursor();
 }
 
 void vga_clear(unsigned char color)
@@ -34,6 +45,7 @@ void vga_clear(unsigned char color)
         buf[i] = vga_entry(' ', color);
     vga_row = 0;
     vga_col = 0;
+    vga_sync_cursor();
 }
 
 void vga_putchar(char c, unsigned char color)
@@ -44,6 +56,7 @@ void vga_putchar(char c, unsigned char color)
         vga_col = 0;
         if (++vga_row == VGA_HEIGHT)
             vga_scroll();
+        vga_sync_cursor();
         return;
     }
     if (c == '\t')
@@ -57,6 +70,7 @@ void vga_putchar(char c, unsigned char color)
             if (++vga_row == VGA_HEIGHT)
                 vga_scroll();
         }
+        vga_sync_cursor();
         return;
     }
     buf[vga_row * VGA_WIDTH + vga_col] = vga_entry(c, color);
@@ -66,6 +80,7 @@ void vga_putchar(char c, unsigned char color)
         if (++vga_row == VGA_HEIGHT)
             vga_scroll();
     }
+    vga_sync_cursor();
 }
 
 void vga_write(const char* str, unsigned char color)
@@ -81,7 +96,14 @@ void vga_backspace(void)
         vga_col--;
         volatile unsigned short* buf = vga_buffer();
         buf[vga_row * VGA_WIDTH + vga_col] = vga_entry(' ', vga_default_color);
+        vga_sync_cursor();
     }
+}
+
+void vga_get_cursor(int *row, int *col)
+{
+    *row = vga_row;
+    *col = vga_col;
 }
 
 void vga_set_cursor(int row, int col)
@@ -90,6 +112,7 @@ void vga_set_cursor(int row, int col)
     {
         vga_row = row;
         vga_col = col;
+        vga_sync_cursor();
     }
 }
 

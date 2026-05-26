@@ -333,10 +333,133 @@ static void cmd_echo(int argc, char **argv)
     serial_putchar('\n');
 }
 
+/* ---- Tab-completion ------------------------------------------------ */
+
+static int shell_tab_complete(char *buf, int *pos, int len, int max)
+{
+    int cursor = *pos;
+    int idx = len;
+
+    /* find start of the current word */
+    int word_start = cursor;
+    while (word_start > 0 && buf[word_start - 1] != ' ' && buf[word_start - 1] != '\t')
+        word_start--;
+
+    int word_len = cursor - word_start;
+
+    /* copy word into a separate buffer so we can null-terminate it */
+    char word[VFS_PATH_MAX];
+    int i;
+    for (i = 0; i < word_len && i < VFS_PATH_MAX - 1; i++)
+        word[i] = buf[word_start + i];
+    word[i] = '\0';
+
+    /* separate directory path and file prefix */
+    char dir[VFS_PATH_MAX];
+    char prefix[VFS_NAME_MAX];
+    int prefix_len;
+
+    const char *last_slash = 0;
+    for (const char *p = word; *p; p++)
+        if (*p == '/') last_slash = p;
+
+    if (last_slash)
+    {
+        /* directory part = everything up to and including the last '/' */
+        int dir_len = last_slash - word + 1;
+        int j;
+        for (j = 0; j < dir_len && j < VFS_PATH_MAX - 1; j++)
+            dir[j] = word[j];
+        dir[j] = '\0';
+        prefix_len = 0;
+        const char *src = last_slash + 1;
+        while (*src && prefix_len < VFS_NAME_MAX - 1)
+            prefix[prefix_len++] = *src++;
+        prefix[prefix_len] = '\0';
+
+        /* resolve dir path */
+        char rbuf[VFS_PATH_MAX];
+        const char *resolved = resolve_path(dir, rbuf, sizeof(rbuf));
+        for (j = 0; resolved[j] && j < VFS_PATH_MAX - 1; j++)
+            dir[j] = resolved[j];
+        dir[j] = '\0';
+    }
+    else
+    {
+        /* no slash – use CWD as directory, entire word as prefix */
+        int j;
+        for (j = 0; CWD[j] && j < VFS_PATH_MAX - 1; j++)
+            dir[j] = CWD[j];
+        dir[j] = '\0';
+        prefix_len = word_len;
+        for (j = 0; j < word_len && j < VFS_NAME_MAX - 1; j++)
+            prefix[j] = word[j];
+        prefix[j] = '\0';
+    }
+
+    /* scan directory for matching entries */
+    struct vfs_dentry de;
+    int match_count = 0;
+    char match_name[VFS_NAME_MAX];
+    int is_dir = 0;
+
+    for (int i = 0; vfs_readdir(dir, i, &de) == 0; i++)
+    {
+        int ok = 1;
+        for (int j = 0; j < prefix_len; j++)
+            if (de.name[j] != prefix[j]) { ok = 0; break; }
+        if (!ok) continue;
+
+        match_count++;
+        if (match_count == 1)
+        {
+            int k;
+            for (k = 0; de.name[k] && k < VFS_NAME_MAX - 1; k++)
+                match_name[k] = de.name[k];
+            match_name[k] = '\0';
+            is_dir = (de.type == VFS_DIR);
+        }
+    }
+
+    if (match_count == 0)
+        return 0;
+
+    /* determine how many chars to insert: the part of match after prefix */
+    int suffix_len = 0;
+    while (match_name[prefix_len + suffix_len])
+        suffix_len++;
+
+    /* for directories, append '/' */
+    int extra = is_dir ? 1 : 0;
+
+    /* check buffer space */
+    if (word_start + word_len + suffix_len + extra >= max - 1)
+        return 0;
+
+    /* make room – shift everything from the insertion point to end of line right */
+    for (int i = idx; i >= word_start + word_len; i--)
+        buf[i + suffix_len + extra] = buf[i];
+
+    /* insert suffix */
+    for (int i = 0; i < suffix_len; i++)
+        buf[word_start + word_len + i] = match_name[prefix_len + i];
+
+    /* for directories, also append '/' */
+    if (is_dir)
+        buf[word_start + word_len + suffix_len] = '/';
+
+    *pos = word_start + word_len + suffix_len + extra;
+    return suffix_len + extra;
+}
+
+/* ------------------------------------------------------------------- */
+
 void shell_run(void)
 {
     char line[LINE_MAX];
     char *argv[MAX_ARGS];
+
+    keyboard_set_tab_complete(shell_tab_complete);
 
     println("Lumin Shell. Type 'help' for commands.");
 
