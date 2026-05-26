@@ -360,6 +360,9 @@ int ata_init(void)
 {
     device_count = 0;
     int idx = 0;
+    int sd_count = 0;
+    int cdrom_count = 0;
+    int nvme_count = 0;
 
     ata_block_ops.read  = ata_block_read;
     ata_block_ops.write = ata_block_write;
@@ -380,24 +383,41 @@ int ata_init(void)
                 if (dev->type != ATA_NONE)
                 {
                     const char *typestr = "?";
+                    const char *devname = "?";
+                    int *counter = NULL;
                     switch (dev->type)
                     {
-                        case ATA_PATA:   typestr = "PATA"; break;
-                        case ATA_PATAPI: typestr = "PATAPI"; break;
-                        case ATA_SATA:   typestr = "SATA"; break;
-                        case ATA_SATAPI: typestr = "SATAPI"; break;
+                        case ATA_PATA:
+                            typestr = "PATA";
+                            devname = "sd";
+                            counter = &sd_count;
+                            break;
+                        case ATA_PATAPI:
+                            typestr = "PATAPI";
+                            devname = "cdrom";
+                            counter = &cdrom_count;
+                            break;
+                        case ATA_SATA:
+                            typestr = "SATA";
+                            devname = "nvme";
+                            counter = &nvme_count;
+                            break;
+                        case ATA_SATAPI:
+                            typestr = "SATAPI";
+                            devname = "cdrom";
+                            counter = &cdrom_count;
+                            break;
                         default: break;
                     }
                     serial_printf(" [%s] %s, %llu sectors",
                                   typestr, dev->model,
                                   (unsigned long long)dev->sectors);
 
-                    if (dev->sectors > 0)
+                    if (dev->sectors > 0 && counter)
                     {
                         struct block_device *bdev = &ata_block_devs[idx];
-                        int n = ksnprintf(bdev->name, sizeof(bdev->name), "ata%c%c",
-                                          (bus == ATA_BUS_PRIMARY) ? 'a' : 'b',
-                                          (drv == ATA_MASTER) ? 'm' : 's');
+                        int n = ksnprintf(bdev->name, sizeof(bdev->name), "%s%d",
+                                          devname, (*counter)++);
                         (void)n;
                         bdev->sector_count = dev->sectors;
                         bdev->sector_size  = 512;
