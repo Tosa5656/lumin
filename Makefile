@@ -81,7 +81,7 @@ OBJS = obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/kprintf.o \
 
 kernel: mkdirs bootloader $(OBJS)
 	${LD} ${LDFLAGS} $(OBJS) -o bin/kernel.bin
-	${TRUNCATE} -s 65536 bin/kernel.bin
+	${TRUNCATE} -s 102400 bin/kernel.bin
 	${CAT} bin/bootloader.bin bin/kernel.bin > lumin.bin
 
 fat32.img:
