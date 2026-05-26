@@ -93,67 +93,15 @@ void kmain(void)
         serial_printf("  %s: %d partition(s)\n", bdev->name, np);
     }
 
-    int fat32_mounted = 0;
-    for (int pi = 0; pi < block_partition_count() && !fat32_mounted; pi++)
+    serial_write("devices in /dev:\n");
+    for (int i = 0; vfs_readdir("/dev", i, &de) == 0; i++)
     {
-        struct block_device *pbdev = block_partition_get(pi);
-        if (!pbdev) continue;
-        serial_printf("fat32: trying partition %s (type=0x%02x, LBA=%llu)\n",
-                      pbdev->name,
-                      ((struct partition *)pbdev->private)->type,
-                      (unsigned long long)((struct partition *)pbdev->private)->start_lba);
-
-        if (vfs_mount_fat32("/mnt", pbdev) == 0)
-        {
-            serial_printf("fat32: mounted partition %s at /mnt\n", pbdev->name);
-            fat32_mounted = 1;
-        }
-        else
-        {
-            serial_printf("fat32: partition %s mount FAILED\n", pbdev->name);
-        }
+        if (de.name[0] == '.' && (de.name[1] == '\0' || (de.name[1] == '.' && de.name[2] == '\0')))
+            continue;
+        serial_printf("  %s (size=%llu, type=%d)\n",
+                      de.name, (unsigned long long)de.size, de.type);
     }
-
-    for (int bi = 0; bi < block_count() && !fat32_mounted; bi++)
-    {
-        struct block_device *raw = block_get(bi);
-        if (!raw) continue;
-        serial_printf("fat32: trying raw device %s\n", raw->name);
-
-        if (vfs_mount_fat32("/mnt", raw) == 0)
-        {
-            serial_printf("fat32: mounted raw device %s at /mnt\n", raw->name);
-            fat32_mounted = 1;
-        }
-        else
-        {
-            serial_printf("fat32: raw device %s mount FAILED\n", raw->name);
-        }
-    }
-
-    if (fat32_mounted)
-    {
-        serial_printf("vfs: ls '/mnt':\n");
-        for (int i = 0; vfs_readdir("/mnt", i, &de) == 0; i++)
-        {
-            serial_printf("  %s (ino=%llu, size=%llu, type=%d)\n",
-                          de.name, (unsigned long long)de.ino,
-                          (unsigned long long)de.size, de.type);
-        }
-
-        struct vfs_file *f = vfs_open("/mnt", VFS_O_READ);
-        if (f)
-        {
-            uint8_t buf[512];
-            int r = vfs_read(f, 512, buf);
-            serial_printf("fat32: read %d bytes from root dir\n", r);
-            vfs_close(f);
-        }
-    }
-    else
-    {
-        serial_write("fat32: no FAT32 volume found\n");
-    }
+    serial_write("use 'mount <device> <path>' to mount a filesystem\n");
 
     __asm__("sti");
     keyboard_init();

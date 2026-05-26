@@ -18,6 +18,7 @@ enum vfs_inode_type {
 struct vfs_inode;
 struct vfs_superblock;
 struct vfs_dentry;
+struct block_device;
 
 struct vfs_inode_ops {
     int (*read)(struct vfs_inode *inode, uint64_t offset, uint64_t size, void *buf);
@@ -71,7 +72,9 @@ struct vfs_file {
 
 int  vfs_init(void);
 int  vfs_mount(const char *path, struct vfs_superblock *sb);
+int  vfs_umount(const char *path);
 int  vfs_mount_devfs(const char *path);
+struct block_device *vfs_get_block_device(const char *path);
 
 struct vfs_file *vfs_open(const char *path, int flags);
 int  vfs_read(struct vfs_file *file, uint64_t size, void *buf);

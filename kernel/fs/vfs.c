@@ -4,6 +4,13 @@
 #include "mm/kmalloc.h"
 #include <stddef.h>
 
+void *memcpy(void *dst, const void *src, unsigned long n)
+{
+    for (unsigned long i = 0; i < n; i++)
+        ((char *)dst)[i] = ((const char *)src)[i];
+    return dst;
+}
+
 static struct vfs_file file_table[VFS_FILE_MAX];
 static int file_count;
 
@@ -213,9 +220,57 @@ int vfs_readdir(const char *path, uint32_t index, struct vfs_dentry *entry)
         return -1;
     }
 
-    int r = inode->ops->readdir(inode, index, entry);
+    uint32_t fs_count = 0;
+    {
+        struct vfs_dentry tmp;
+        while (inode->ops->readdir(inode, fs_count, &tmp) == 0)
+            fs_count++;
+    }
+
+    if (index < fs_count)
+    {
+        int r = inode->ops->readdir(inode, index, entry);
+        vfs_inode_unref(inode);
+        return r;
+    }
+
     vfs_inode_unref(inode);
-    return r;
+
+    int path_len = 0;
+    while (path[path_len]) path_len++;
+
+    uint32_t mnt_idx = 0;
+    for (int mi = 1; mi < mount_count; mi++)
+    {
+        const char *mp = mounts[mi].path;
+        int j;
+        for (j = 0; j < path_len; j++)
+            if (mp[j] != path[j]) break;
+        if (j != path_len) continue;
+
+        const char *child = mp + j;
+        while (*child == '/') child++;
+        if (*child == '\0') continue;
+        int is_direct = 1;
+        for (int k = 0; child[k]; k++)
+            if (child[k] == '/') { is_direct = 0; break; }
+        if (!is_direct) continue;
+
+        if (mnt_idx == index - fs_count)
+        {
+            int n;
+            for (n = 0; child[n] && n < VFS_NAME_MAX - 1; n++)
+                entry->name[n] = child[n];
+            entry->name[n] = '\0';
+            entry->ino  = 0;
+            entry->type = VFS_DIR;
+            entry->size = 0;
+            return 0;
+        }
+        mnt_idx++;
+    }
+
+    return -1;
 }
 
 int vfs_stat(const char *path, struct vfs_dentry *entry)
@@ -352,7 +407,8 @@ struct devfs_data {
     int next_ino;
 };
 
-static struct devfs_data devfs_data;
+static struct devfs_data devfs_root_data;
+static struct devfs_data devfs_dev_data;
 static struct vfs_inode  devfs_root_inode;
 static struct vfs_superblock devfs_sb;
 
@@ -415,7 +471,7 @@ static int devfs_dir_lookup(struct vfs_inode *dir, const char *name, struct vfs_
             if (inode->type == VFS_DIR)
             {
                 inode->ops = dir->ops;
-                inode->private = d;
+                inode->private = d->entries[i].private ? d->entries[i].private : d;
             }
             else if (inode->type == VFS_BLKDEV)
             {
@@ -548,34 +604,72 @@ int vfs_mount_devfs(const char *path)
 {
     (void)path;
 
-    struct devfs_data *d = &devfs_data;
-    d->entry_count = 0;
-    d->next_ino = 1;
+    struct devfs_data *root = &devfs_root_data;
+    root->entry_count = 0;
+    root->next_ino = 1;
 
-    struct devfs_entry *dot = &d->entries[d->entry_count++];
-    int n;
-    for (n = 0; "."[n]; n++) dot->name[n] = "."[n];
-    dot->name[n] = '\0';
-    dot->ino   = 0;
-    dot->type  = VFS_DIR;
-    dot->size  = 0;
-    dot->private = NULL;
+    {
+        struct devfs_entry *e = &root->entries[root->entry_count++];
+        e->name[0] = '.';
+        e->name[1] = '\0';
+        e->ino   = 0;
+        e->type  = VFS_DIR;
+        e->size  = 0;
+        e->private = root;
+    }
+
+    struct devfs_data *dev = &devfs_dev_data;
+    dev->entry_count = 0;
+    dev->next_ino = 1;
+
+    {
+        struct devfs_entry *e = &dev->entries[dev->entry_count++];
+        e->name[0] = '.';
+        e->name[1] = '\0';
+        e->ino   = 0;
+        e->type  = VFS_DIR;
+        e->size  = 0;
+        e->private = dev;
+    }
+
+    {
+        struct devfs_entry *e = &dev->entries[dev->entry_count++];
+        e->name[0] = '.';
+        e->name[1] = '.';
+        e->name[2] = '\0';
+        e->ino   = 0;
+        e->type  = VFS_DIR;
+        e->size  = 0;
+        e->private = root;
+    }
 
     int bcount = block_count();
-    for (int i = 0; i < bcount && d->entry_count < DEVFS_MAX_ENTRIES; i++)
+    for (int i = 0; i < bcount && dev->entry_count < DEVFS_MAX_ENTRIES; i++)
     {
         struct block_device *bdev = block_get(i);
         if (!bdev) continue;
 
-        struct devfs_entry *e = &d->entries[d->entry_count++];
+        struct devfs_entry *e = &dev->entries[dev->entry_count++];
         int k;
         for (k = 0; bdev->name[k] && k < VFS_NAME_MAX - 1; k++)
             e->name[k] = bdev->name[k];
         e->name[k] = '\0';
-        e->ino   = d->next_ino++;
+        e->ino   = dev->next_ino++;
         e->type  = VFS_BLKDEV;
         e->size  = bdev->sector_count * bdev->sector_size;
         e->private = bdev;
+    }
+
+    {
+        struct devfs_entry *e = &root->entries[root->entry_count++];
+        e->name[0] = 'd';
+        e->name[1] = 'e';
+        e->name[2] = 'v';
+        e->name[3] = '\0';
+        e->ino   = root->next_ino++;
+        e->type  = VFS_DIR;
+        e->size  = 0;
+        e->private = dev;
     }
 
     devfs_root_inode.ino      = 0;
@@ -583,13 +677,46 @@ int vfs_mount_devfs(const char *path)
     devfs_root_inode.size     = 0;
     devfs_root_inode.sb       = &devfs_sb;
     devfs_root_inode.ops      = &devfs_dir_ops;
-    devfs_root_inode.private  = d;
+    devfs_root_inode.private  = root;
     devfs_root_inode.refcount = 1;
 
     devfs_sb.mounted  = 1;
     devfs_sb.sb_ops   = &devfs_sb_ops;
     devfs_sb.root     = &devfs_root_inode;
-    devfs_sb.private  = d;
+    devfs_sb.private  = root;
 
     return vfs_mount("/", &devfs_sb);
+}
+
+int vfs_umount(const char *path)
+{
+    if (!path) return -1;
+    for (int i = 1; i < mount_count; i++)
+    {
+        if (path_match(mounts[i].path, path))
+        {
+            for (int j = i; j < mount_count - 1; j++)
+                __builtin_memcpy(&mounts[j], &mounts[j + 1], sizeof(struct vfs_mount_entry));
+            mount_count--;
+            serial_printf("vfs: unmounted '%s'\n", path);
+            return 0;
+        }
+    }
+    return -1;
+}
+
+struct block_device *vfs_get_block_device(const char *path)
+{
+    if (!path) return NULL;
+    struct vfs_inode *inode = NULL;
+    if (resolve_full(path, &inode) != 0)
+        return NULL;
+    if (inode->type != VFS_BLKDEV)
+    {
+        vfs_inode_unref(inode);
+        return NULL;
+    }
+    struct block_device *bdev = (struct block_device *)inode->private;
+    vfs_inode_unref(inode);
+    return bdev;
 }

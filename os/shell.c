@@ -4,6 +4,7 @@
 #include "drivers/serial/serial.h"
 #include "drivers/acpi/acpi.h"
 #include "fs/vfs.h"
+#include "fs/fat32.h"
 #include "mm/kmalloc.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -11,21 +12,69 @@
 #define MAX_ARGS 16
 #define LINE_MAX 256
 
-#define CWD "/mnt"
+static char CWD[VFS_PATH_MAX] = "/";
 
 static const char *resolve_path(const char *path, char *buf, int bufsz)
 {
-    if (!path)
-        return CWD;
-    if (path[0] == '/')
-        return path;
+    if (!path) return CWD;
+
     int n;
-    for (n = 0; CWD[n] && n < bufsz - 2; n++)
-        buf[n] = CWD[n];
-    buf[n++] = '/';
-    while (*path && n < bufsz - 1)
-        buf[n++] = *path++;
-    buf[n] = '\0';
+    if (path[0] == '/')
+    {
+        n = 0;
+        buf[0] = '\0';
+    }
+    else
+    {
+        for (n = 0; CWD[n] && n < bufsz - 1; n++)
+            buf[n] = CWD[n];
+        buf[n] = '\0';
+    }
+
+    while (*path)
+    {
+        while (*path == '/')
+            path++;
+        if (!*path) break;
+
+        const char *end = path;
+        while (*end && *end != '/')
+            end++;
+
+        int len = end - path;
+        if (len == 2 && path[0] == '.' && path[1] == '.')
+        {
+            if (n > 1)
+            {
+                n--;
+                while (n > 0 && buf[n] != '/')
+                    n--;
+                buf[n] = '\0';
+            }
+            if (n == 0)
+            {
+                buf[0] = '/';
+                buf[1] = '\0';
+                n = 1;
+            }
+        }
+        else if (len == 1 && path[0] == '.')
+        {
+            /* skip */
+        }
+        else
+        {
+            if (n == 0 || buf[n - 1] != '/')
+                buf[n++] = '/';
+            for (int i = 0; i < len && n < bufsz - 1; i++)
+                buf[n++] = path[i];
+            buf[n] = '\0';
+        }
+
+        path = end;
+    }
+
+    if (n == 0) { buf[0] = '/'; buf[1] = '\0'; }
     return buf;
 }
 
@@ -79,6 +128,8 @@ static void cmd_help(void)
 {
     println("Lumin Shell v0.1");
     println("  ls [path]          - list directory");
+    println("  cd [path]          - change directory");
+    println("  pwd                - print working directory");
     println("  cat <path>         - read file");
     println("  create <path>      - create empty file");
     println("  write <path> <txt> - write text to file");
@@ -86,17 +137,87 @@ static void cmd_help(void)
     println("  mkdir <path>       - create directory");
     println("  stat <path>        - file info");
     println("  echo <text>        - echo text");
+    println("  mount <dev> <path> - mount device at path");
+    println("  umount <path>      - unmount filesystem");
     println("  help               - this help");
-    println("  reboot             - not implemented");
+    println("  shutdown           - power off");
 }
 
-static void cmd_ls(char *path)
+static void cmd_cd(const char *path)
+{
+    char rbuf[VFS_PATH_MAX];
+    const char *target = resolve_path(path, rbuf, sizeof(rbuf));
+
+    struct vfs_dentry de;
+    if (vfs_stat(target, &de) != 0)
+    {
+        print("cd: ");
+        print(target);
+        println(": no such file or directory");
+        return;
+    }
+    if (de.type != VFS_DIR)
+    {
+        print("cd: ");
+        print(target);
+        println(": not a directory");
+        return;
+    }
+
+    int i;
+    for (i = 0; target[i] && i < VFS_PATH_MAX - 1; i++)
+        CWD[i] = target[i];
+    CWD[i] = '\0';
+}
+
+static void cmd_pwd(void)
+{
+    println(CWD);
+}
+
+static void cmd_mount(int argc, char **argv)
+{
+    if (argc < 2) { println("usage: mount <device> <path>"); return; }
+
+    char devbuf[VFS_PATH_MAX];
+    char mntbuf[VFS_PATH_MAX];
+    const char *dev = resolve_path(argv[0], devbuf, sizeof(devbuf));
+    const char *mnt = resolve_path(argv[1], mntbuf, sizeof(mntbuf));
+
+    struct block_device *bdev = vfs_get_block_device(dev);
+    if (!bdev)
+    {
+        print("mount: ");
+        print(dev);
+        println(": not a block device");
+        return;
+    }
+
+    if (vfs_mount_fat32(mnt, bdev) != 0)
+    {
+        print("mount: ");
+        print(mnt);
+        println(": mount failed (not FAT32?)");
+    }
+}
+
+static void cmd_umount(const char *path)
+{
+    if (!path) { println("usage: umount <path>"); return; }
+    char buf[VFS_PATH_MAX];
+    path = resolve_path(path, buf, sizeof(buf));
+    if (vfs_umount(path) != 0)
+    {
+        print("umount: ");
+        print(path);
+        println(": not mounted");
+    }
+}
+
+static void cmd_ls(const char *arg)
 {
     char buf[VFS_PATH_MAX];
-    if(path != NULL)
-        path = (char *)resolve_path(path, buf, sizeof(buf));
-    else
-        path = (char *)CWD;
+    const char *path = (arg) ? resolve_path(arg, buf, sizeof(buf)) : CWD;
     struct vfs_dentry de;
     int found = 0;
     for (int i = 0; vfs_readdir(path, i, &de) == 0; i++)
@@ -246,6 +367,14 @@ void shell_run(void)
             cmd_mkdir(argv[1]);
         else if (strcmp(argv[0], "stat") == 0)
             cmd_stat(argv[1]);
+        else if (strcmp(argv[0], "cd") == 0)
+            cmd_cd(argv[1]);
+        else if (strcmp(argv[0], "pwd") == 0)
+            cmd_pwd();
+        else if (strcmp(argv[0], "mount") == 0)
+            cmd_mount(argc - 1, argv + 1);
+        else if (strcmp(argv[0], "umount") == 0)
+            cmd_umount(argv[1]);
         else if (strcmp(argv[0], "echo") == 0)
             cmd_echo(argc - 1, argv + 1);
         else if (strcmp(argv[0], "shutdown") == 0)
