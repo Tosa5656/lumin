@@ -1,6 +1,7 @@
 #include "drivers/vga/vga.h"
 #include "drivers/serial/serial.h"
 #include "drivers/rtc/rtc.h"
+#include "gdt.h"
 #include "idt.h"
 #include "drivers/timer/timer.h"
 #include "mm/pmm.h"
@@ -38,6 +39,8 @@ void kmain(void)
     serial_write("Serial initialized.\n");
 
     keyboard_color = color;
+
+    gdt_init();
 
     idt_init();
     serial_write("IDT initialized (exceptions + IRQs).\n");

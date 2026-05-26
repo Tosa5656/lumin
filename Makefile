@@ -34,6 +34,9 @@ obj/panic.o: kernel/panic.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/acpi.o: kernel/drivers/acpi/acpi.c
 	${CC} ${CFLAGS} -c $< -o $@
+obj/gdt.o: kernel/gdt.c
+	${CC} ${CFLAGS} -c $< -o $@
+
 obj/idt.o: kernel/idt.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/pmm.o: kernel/mm/pmm.c
@@ -71,7 +74,7 @@ obj/fat32.o: kernel/fs/fat32.c
 	${CC} ${CFLAGS} -c $< -o $@
 
 OBJS = obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/kprintf.o \
-       obj/panic.o obj/acpi.o obj/idt.o obj/pmm.o obj/kmalloc.o \
+       obj/panic.o obj/acpi.o obj/gdt.o obj/idt.o obj/pmm.o obj/kmalloc.o \
        obj/shell.o obj/keyboard.o obj/vga.o obj/serial.o obj/rtc.o \
        obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o \
        obj/pci.o obj/ata.o obj/block.o obj/vfs.o obj/fat32.o
