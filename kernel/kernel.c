@@ -77,6 +77,9 @@ void kmain(void)
     vfs_mount_devfs("/");
     serial_printf("vfs: devfs mounted at '/'\n");
 
+    vfs_mount_devfs("/dev");
+    serial_printf("vfs: devfs mounted at '/dev'\n");
+
     struct vfs_dentry de;
     serial_printf("vfs: ls '/':\n");
     for (int i = 0; vfs_readdir("/", i, &de) == 0; i++)

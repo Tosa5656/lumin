@@ -6,7 +6,6 @@ _start:
     mov ds, ax
     mov es, ax
 
-    ; Extended INT 13h (LBA) — load kernel
     mov ah, 0x41
     mov bx, 0x55AA
     int 0x13
@@ -59,18 +58,18 @@ init_pm:
     rep movsd
 
     mov edi, 0x1000
-    mov cr3, edi        
+    mov cr3, edi
     xor eax, eax
     mov ecx, 4096
-    rep stosd           
+    rep stosd
 
     mov dword [0x1000], 0x2003
     mov dword [0x2000], 0x3003
     mov dword [0x3000], 0x4003
 
     mov edi, 0x4000
-    mov ebx, 0x00000003 
-    mov ecx, 512        
+    mov ebx, 0x00000003
+    mov ecx, 512
 .set_entry:
     mov [edi], ebx
     add edi, 8
@@ -121,16 +120,16 @@ init_pm:
 .no_huge:
 
     mov eax, cr4
-    or eax, 1 << 5      
+    or eax, 1 << 5
     mov cr4, eax
 
-    mov ecx, 0xC0000080 
-    rdmsr               
-    or eax, 1 << 8      
-    wrmsr               
+    mov ecx, 0xC0000080
+    rdmsr
+    or eax, 1 << 8
+    wrmsr
 
     mov eax, cr0
-    or eax, 1 << 31     
+    or eax, 1 << 31
     mov cr0, eax
 
     lgdt [gdt64_descriptor]
@@ -180,11 +179,11 @@ DATA_SEG_32 equ gdt32_data - gdt32_start
 
 align 4
 gdt64_start:
-    dd 0x0, 0x0         
-gdt64_code:             
+    dd 0x0, 0x0
+gdt64_code:
     dw 0x0, 0x0
     db 0x0, 10011010b, 00100000b, 0x0
-gdt64_data:             
+gdt64_data:
     dw 0x0, 0x0
     db 0x0, 10010010b, 00000000b, 0x0
 gdt64_end:

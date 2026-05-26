@@ -9,7 +9,6 @@ _start:
     mov rsp, 0x90000
     mov rbp, rsp
 
-    ; Zero BSS
     mov rdi, __bss_start
     mov rcx, __bss_end
     sub rcx, rdi

@@ -72,12 +72,10 @@ static int resolve_full(const char *path, struct vfs_inode **out_inode)
             buf[j++] = path[i++];
         buf[j] = '\0';
 
-        /* add this component to fullpath */
         for (int k = 0; k < j && fp_len < VFS_PATH_MAX - 1; k++)
             fullpath[fp_len++] = buf[k];
         fullpath[fp_len] = '\0';
 
-        /* check if this path is a mount point */
         struct vfs_inode *mnt_root = NULL;
         for (int mi = 1; mi < mount_count; mi++)
         {
@@ -113,6 +111,22 @@ static int resolve_full(const char *path, struct vfs_inode **out_inode)
         }
     }
 
+    fullpath[fp_len] = '\0';
+
+    for (int mi = mount_count - 1; mi >= 0; mi--)
+    {
+        if (path_match(mounts[mi].path, fullpath))
+        {
+            if (mounts[mi].sb.root && mounts[mi].sb.root != cur)
+            {
+                vfs_inode_unref(cur);
+                cur = mounts[mi].sb.root;
+                vfs_inode_ref(cur);
+            }
+            break;
+        }
+    }
+
     *out_inode = cur;
     return 0;
 }
@@ -123,7 +137,6 @@ int vfs_init(void)
     mount_count = 0;
     for (int i = 0; i < VFS_FILE_MAX; i++)
         file_table[i].inode = NULL;
-    /* ensure mounts[0].path is "/" for the root mount */
     mounts[0].path[0] = '/';
     mounts[0].path[1] = '\0';
     serial_write("vfs: initialized\n");
@@ -389,7 +402,6 @@ int vfs_mkdir(const char *path)
     return r;
 }
 
-/* ───── devfs ───── */
 
 struct devfs_entry {
     char    name[VFS_NAME_MAX];
@@ -410,7 +422,9 @@ struct devfs_data {
 static struct devfs_data devfs_root_data;
 static struct devfs_data devfs_dev_data;
 static struct vfs_inode  devfs_root_inode;
+static struct vfs_inode  devfs_dev_inode;
 static struct vfs_superblock devfs_sb;
+static struct vfs_superblock devfs_dev_sb;
 
 static struct vfs_inode *devfs_alloc_inode(struct vfs_superblock *sb)
 {
@@ -419,7 +433,7 @@ static struct vfs_inode *devfs_alloc_inode(struct vfs_superblock *sb)
 
 static void devfs_destroy_inode(struct vfs_inode *inode)
 {
-    if (!inode || inode == &devfs_root_inode) return;
+    if (!inode || inode == &devfs_root_inode || inode == &devfs_dev_inode) return;
     kfree(inode);
 }
 
@@ -602,7 +616,7 @@ static struct vfs_sb_ops devfs_sb_ops = {
 
 int vfs_mount_devfs(const char *path)
 {
-    (void)path;
+    if (!path) return -1;
 
     struct devfs_data *root = &devfs_root_data;
     root->entry_count = 0;
@@ -660,32 +674,50 @@ int vfs_mount_devfs(const char *path)
         e->private = bdev;
     }
 
+    if (path[0] == '/' && path[1] == '\0')
     {
-        struct devfs_entry *e = &root->entries[root->entry_count++];
-        e->name[0] = 'd';
-        e->name[1] = 'e';
-        e->name[2] = 'v';
-        e->name[3] = '\0';
-        e->ino   = root->next_ino++;
-        e->type  = VFS_DIR;
-        e->size  = 0;
-        e->private = dev;
+        {
+            struct devfs_entry *e = &root->entries[root->entry_count++];
+            e->name[0] = 'd';
+            e->name[1] = 'e';
+            e->name[2] = 'v';
+            e->name[3] = '\0';
+            e->ino   = root->next_ino++;
+            e->type  = VFS_DIR;
+            e->size  = 0;
+            e->private = dev;
+        }
+
+        devfs_root_inode.ino      = 0;
+        devfs_root_inode.type     = VFS_DIR;
+        devfs_root_inode.size     = 0;
+        devfs_root_inode.sb       = &devfs_sb;
+        devfs_root_inode.ops      = &devfs_dir_ops;
+        devfs_root_inode.private  = root;
+        devfs_root_inode.refcount = 1;
+
+        devfs_sb.mounted  = 1;
+        devfs_sb.sb_ops   = &devfs_sb_ops;
+        devfs_sb.root     = &devfs_root_inode;
+        devfs_sb.private  = root;
+
+        return vfs_mount("/", &devfs_sb);
     }
 
-    devfs_root_inode.ino      = 0;
-    devfs_root_inode.type     = VFS_DIR;
-    devfs_root_inode.size     = 0;
-    devfs_root_inode.sb       = &devfs_sb;
-    devfs_root_inode.ops      = &devfs_dir_ops;
-    devfs_root_inode.private  = root;
-    devfs_root_inode.refcount = 1;
+    devfs_dev_inode.ino      = 0;
+    devfs_dev_inode.type     = VFS_DIR;
+    devfs_dev_inode.size     = 0;
+    devfs_dev_inode.sb       = &devfs_dev_sb;
+    devfs_dev_inode.ops      = &devfs_dir_ops;
+    devfs_dev_inode.private  = dev;
+    devfs_dev_inode.refcount = 1;
 
-    devfs_sb.mounted  = 1;
-    devfs_sb.sb_ops   = &devfs_sb_ops;
-    devfs_sb.root     = &devfs_root_inode;
-    devfs_sb.private  = root;
+    devfs_dev_sb.mounted  = 1;
+    devfs_dev_sb.sb_ops   = &devfs_sb_ops;
+    devfs_dev_sb.root     = &devfs_dev_inode;
+    devfs_dev_sb.private  = dev;
 
-    return vfs_mount("/", &devfs_sb);
+    return vfs_mount(path, &devfs_dev_sb);
 }
 
 int vfs_umount(const char *path)

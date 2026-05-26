@@ -13,7 +13,7 @@
 
 enum ata_bus { ATA_BUS_PRIMARY = 0, ATA_BUS_SECONDARY };
 
-enum ata_drive_type 
+enum ata_drive_type
 {
     ATA_NONE,
     ATA_PATA,

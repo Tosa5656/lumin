@@ -10,7 +10,6 @@ static int ctrl_pressed;
 static int caps_locked;
 static int extended;
 
-/* ring buffer for ISR */
 static volatile char keybuf[KEYBUF_SIZE];
 static volatile int keybuf_head;
 static volatile int keybuf_tail;
@@ -155,7 +154,6 @@ static int hist_strcmp(const char *a, const char *b)
     return (unsigned char)*a - (unsigned char)*b;
 }
 
-/* tab-completion hook (set by shell) */
 static tab_complete_fn tab_complete_hook;
 
 void keyboard_set_tab_complete(tab_complete_fn fn)
@@ -163,44 +161,31 @@ void keyboard_set_tab_complete(tab_complete_fn fn)
     tab_complete_hook = fn;
 }
 
-/* helper: redraw the input line on VGA starting from (row,col).
-   also moves hardware cursor to the correct position. */
 static void vga_redraw_line(const char *buf, int idx, int cursor,
                             int start_row, int start_col)
 {
     volatile unsigned short *vga_buf = (volatile unsigned short *)VGA_ADDRESS;
     unsigned char color = keyboard_color;
 
-    /* compute the first position that needs clearing —
-       anything after buf[idx-1] up to the end of the visible region
-       left by a previous longer line.  We clear up to (start_row,end_row)
-       by comparison of current vs old line length.
-       The simplest robust approach: write the line, then figure
-       out where we ended up and write spaces for the rest of
-       the current screen line if needed. */
 
     int r = start_row;
     int c = start_col;
 
-    /* write the buffer */
     for (int i = 0; i < idx; i++)
     {
         vga_buf[r * VGA_WIDTH + c] = vga_entry((unsigned char)buf[i], color);
         if (++c == VGA_WIDTH) { c = 0; r++; }
     }
 
-    /* clear the rest of the current row (safest – avoids leftover chars) */
     while (r * VGA_WIDTH + c < (start_row * VGA_WIDTH + start_col + idx + 256)
            && r < VGA_HEIGHT)
     {
         vga_buf[r * VGA_WIDTH + c] = vga_entry(' ', color);
         if (++c == VGA_WIDTH) { c = 0; r++; }
-        /* stop after one extra screen of clearing */
         if (r * VGA_WIDTH + c >= start_row * VGA_WIDTH + start_col + VGA_WIDTH * 2)
             break;
     }
 
-    /* place cursor */
     {
         int cr = start_row + (start_col + cursor) / VGA_WIDTH;
         int cc = (start_col + cursor) % VGA_WIDTH;
@@ -209,7 +194,6 @@ static void vga_redraw_line(const char *buf, int idx, int cursor,
     }
 }
 
-/* helper: send buf characters to serial for echo */
 static void serial_echo_line(const char *buf, int idx)
 {
     for (int i = 0; i < idx; i++)
@@ -238,7 +222,6 @@ int keyboard_readline(char *buf, int max)
             unsigned char c = (unsigned char)keybuf[keybuf_tail];
             keybuf_tail = (keybuf_tail + 1) & (KEYBUF_SIZE - 1);
 
-            /* ---------- Enter ---------- */
             if (c == '\n')
             {
                 buf[idx] = '\0';
@@ -264,7 +247,6 @@ int keyboard_readline(char *buf, int max)
                 return idx;
             }
 
-            /* ---------- Backspace ---------- */
             if (c == '\b')
             {
                 if (cursor > 0)
@@ -280,7 +262,6 @@ int keyboard_readline(char *buf, int max)
                 continue;
             }
 
-            /* ---------- Delete ---------- */
             if (c == KEY_DEL)
             {
                 if (cursor < idx)
@@ -294,7 +275,6 @@ int keyboard_readline(char *buf, int max)
                 continue;
             }
 
-            /* ---------- Ctrl-U: clear line ---------- */
             if (c == 0x15)
             {
                 if (idx > 0)
@@ -307,7 +287,6 @@ int keyboard_readline(char *buf, int max)
                 continue;
             }
 
-            /* ---------- Cursor movement ---------- */
             if (c == KEY_LEFT)
             {
                 if (cursor > 0)
@@ -350,7 +329,6 @@ int keyboard_readline(char *buf, int max)
                 continue;
             }
 
-            /* ---------- Tab completion ---------- */
             if (c == '\t')
             {
                 if (tab_complete_hook)
@@ -358,14 +336,13 @@ int keyboard_readline(char *buf, int max)
                     int result = tab_complete_hook(buf, &cursor, idx, max);
                     if (result > 0)
                     {
-                        idx = cursor; /* cursor is also the new length */
+                        idx = cursor;
                         vga_redraw_line(buf, idx, cursor, start_row, start_col);
                     }
                 }
                 continue;
             }
 
-            /* ---------- History UP ---------- */
             if (c == KEY_UP)
             {
                 if (hist_count == 0) continue;
@@ -400,7 +377,6 @@ int keyboard_readline(char *buf, int max)
                 continue;
             }
 
-            /* ---------- History DOWN ---------- */
             if (c == KEY_DOWN)
             {
                 if (browsing == -1) continue;
@@ -433,10 +409,8 @@ int keyboard_readline(char *buf, int max)
                 continue;
             }
 
-            /* ---------- Regular character — insert at cursor ---------- */
             if (idx < max - 1)
             {
-                /* shift characters right from cursor to make room */
                 for (int i = idx; i > cursor; i--)
                     buf[i] = buf[i - 1];
                 buf[cursor] = c;

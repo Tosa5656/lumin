@@ -19,7 +19,6 @@ bootloader: mkdirs
 
 HDRS = kernel os
 
-# Per-file compile rules
 obj/kernel_entry.o: kernel/kernel_entry.asm
 	${AS} -f elf64 $< -o $@
 
