@@ -216,7 +216,21 @@ int keyboard_readline(char *buf, int max)
 
     while (1)
     {
-        __asm__("sti; hlt");
+        int ser = serial_readchar();
+        while (ser >= 0)
+        {
+            int next = (keybuf_head + 1) & (KEYBUF_SIZE - 1);
+            if (next != keybuf_tail)
+            {
+                keybuf[keybuf_head] = ser;
+                keybuf_head = next;
+            }
+            ser = serial_readchar();
+        }
+
+        if (keybuf_tail == keybuf_head)
+            __asm__("sti; hlt");
+
         while (keybuf_tail != keybuf_head)
         {
             unsigned char c = (unsigned char)keybuf[keybuf_tail];

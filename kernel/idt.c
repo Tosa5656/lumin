@@ -155,7 +155,7 @@ void idt_init(void)
 
     idt_set_entry(32, isr32_handler, 0x08, 0x8E);
     idt_set_entry(33, isr33_handler, 0x08, 0x8E);
-    idt_set_entry(48, isr48_handler, 0x08, 0x8E);
+    idt_set_entry(48, isr48_handler, 0x08, 0xEE);
 
     struct idt_ptr_t idt_ptr;
     idt_ptr.limit = sizeof(idt) - 1;

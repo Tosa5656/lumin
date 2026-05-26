@@ -38,5 +38,6 @@ struct tss_t
 } __attribute__((packed));
 
 void gdt_init(void);
+void gdt_set_kstack(uint64_t rsp0);
 
 #endif

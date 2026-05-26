@@ -6,6 +6,9 @@
 #include "drivers/timer/timer.h"
 #include "mm/pmm.h"
 #include "mm/kmalloc.h"
+#include "mm/vmm.h"
+#include "proc/task.h"
+#include "proc/elf.h"
 #include "drivers/pci/pci.h"
 #include "drivers/ata/ata.h"
 #include "block/block.h"
@@ -25,6 +28,40 @@ static const char *timer_name(enum timer_type t)
         case TIMER_LAPIC: return "LAPIC";
         default:          return "NONE";
     }
+}
+
+static void run_init(void)
+{
+    struct vfs_file *f = vfs_open("/mnt/init.elf", VFS_O_READ);
+    if (!f)
+    {
+        serial_write("init: /mnt/init.elf not found\n");
+        return;
+    }
+
+    uint64_t *pml4 = vmm_create_pml4();
+    if (!pml4)
+    {
+        serial_write("init: vmm_create_pml4 failed\n");
+        vfs_close(f);
+        return;
+    }
+
+    uint64_t entry = elf_load(f, pml4);
+    vfs_close(f);
+
+    if (!entry)
+    {
+        serial_write("init: elf_load failed\n");
+        return;
+    }
+
+    serial_printf("init: entry=0x%p, starting...\n", (void*)entry);
+
+    __asm__("sti");
+    exec_user(entry, pml4);
+
+    serial_write("init: returned from userspace\n");
 }
 
 void kmain(void)
@@ -80,15 +117,6 @@ void kmain(void)
     vfs_mount_devfs("/dev");
     serial_printf("vfs: devfs mounted at '/dev'\n");
 
-    struct vfs_dentry de;
-    serial_printf("vfs: ls '/':\n");
-    for (int i = 0; vfs_readdir("/", i, &de) == 0; i++)
-    {
-        serial_printf("  %s (ino=%llu, size=%llu, type=%d)\n",
-                      de.name, (unsigned long long)de.ino,
-                      (unsigned long long)de.size, de.type);
-    }
-
     serial_write("vfs: scanning partitions...\n");
     for (int bi = 0; bi < block_count(); bi++)
     {
@@ -100,6 +128,7 @@ void kmain(void)
     }
 
     serial_write("devices in /dev:\n");
+    struct vfs_dentry de;
     for (int i = 0; vfs_readdir("/dev", i, &de) == 0; i++)
     {
         if (de.name[0] == '.' && (de.name[1] == '\0' || (de.name[1] == '.' && de.name[2] == '\0')))
@@ -107,7 +136,23 @@ void kmain(void)
         serial_printf("  %s (size=%llu, type=%d)\n",
                       de.name, (unsigned long long)de.size, de.type);
     }
-    serial_write("use 'mount <device> <path>' to mount a filesystem\n");
+
+    serial_write("mounting sd1 as fat32...\n");
+    struct block_device *sd1 = block_get(1);
+    if (sd1)
+    {
+        serial_printf("  device: %s (%llu sectors)\n", sd1->name, sd1->sector_count);
+        if (vfs_mount_fat32("/mnt", sd1) == 0)
+            serial_write("  mounted at /mnt\n");
+        else
+            serial_write("  mount FAILED (not FAT32?)\n");
+    }
+
+    task_init();
+
+    run_init();
+
+    serial_write("kernel: back from init, starting shell\n");
 
     __asm__("sti");
     keyboard_init();

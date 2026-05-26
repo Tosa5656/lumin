@@ -84,3 +84,8 @@ void gdt_init(void)
 
     serial_write("GDT: Ring 0/3 + TSS loaded\n");
 }
+
+void gdt_set_kstack(uint64_t rsp0)
+{
+    tss.rsp[0] = rsp0;
+}

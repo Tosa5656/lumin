@@ -14,6 +14,13 @@ void serial_init(void)
     outb(COM1 + 4, 0x0B);
 }
 
+int serial_readchar(void)
+{
+    if (inb(COM1 + 5) & 1)
+        return inb(COM1);
+    return -1;
+}
+
 void serial_putchar(char c)
 {
     while (!(inb(COM1 + 5) & 0x20));

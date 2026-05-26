@@ -42,6 +42,14 @@ obj/pmm.o: kernel/mm/pmm.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/kmalloc.o: kernel/mm/kmalloc.c
 	${CC} ${CFLAGS} -c $< -o $@
+obj/vmm.o: kernel/mm/vmm.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/elf.o: kernel/proc/elf.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/task.o: kernel/proc/task.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/syscall.o: kernel/proc/syscall.c
+	${CC} ${CFLAGS} -c $< -o $@
 
 obj/shell.o: os/shell.c
 	${CC} ${CFLAGS} -c $< -o $@
@@ -74,6 +82,7 @@ obj/fat32.o: kernel/fs/fat32.c
 
 OBJS = obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/kprintf.o \
        obj/panic.o obj/acpi.o obj/gdt.o obj/idt.o obj/pmm.o obj/kmalloc.o \
+       obj/vmm.o obj/elf.o obj/task.o obj/syscall.o \
        obj/shell.o obj/keyboard.o obj/vga.o obj/serial.o obj/rtc.o \
        obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o \
        obj/pci.o obj/ata.o obj/block.o obj/vfs.o obj/fat32.o
@@ -83,9 +92,23 @@ kernel: mkdirs bootloader $(OBJS)
 	${TRUNCATE} -s 102400 bin/kernel.bin
 	${CAT} bin/bootloader.bin bin/kernel.bin > lumin.bin
 
-fat32.img:
+USER_CC = x86_64-pc-linux-gnu-gcc
+USER_CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zone -mcmodel=large
+USER_LDFLAGS = -m64 -no-pie -nostdlib -mcmodel=large -Wl,-Ttext-segment=0x8000000000,-e,_start
+
+user/init.elf: user/init.c
+	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $<
+	chmod -x $@
+
+user/hello.elf: user/hello.c
+	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $<
+	chmod -x $@
+
+fat32.img: user/init.elf user/hello.elf
 	dd if=/dev/zero of=fat32.img bs=1M count=32
 	mkfs.fat -F 32 fat32.img
+	mcopy -i fat32.img user/init.elf ::init.elf
+	mcopy -i fat32.img user/hello.elf ::hello.elf
 
 qemu: kernel fat32.img
 	qemu-system-x86_64 -drive format=raw,file=lumin.bin \

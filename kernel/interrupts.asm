@@ -102,10 +102,13 @@ isr33_handler:
     popaq
     iretq
 
+extern syscall_entry
+
 global isr48_handler
 isr48_handler:
     pushaq
-    mov rdi, 48
-    call irq_handler
+    mov rdi, rsp
+    call syscall_entry
+    mov [rsp + 112], rax
     popaq
     iretq

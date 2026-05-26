@@ -6,6 +6,9 @@
 #include "fs/vfs.h"
 #include "fs/fat32.h"
 #include "mm/kmalloc.h"
+#include "mm/vmm.h"
+#include "proc/elf.h"
+#include "proc/task.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -137,6 +140,7 @@ static void cmd_help(void)
     println("  mkdir <path>       - create directory");
     println("  stat <path>        - file info");
     println("  echo <text>        - echo text");
+    println("  exec <path>        - execute ELF program");
     println("  mount <dev> <path> - mount device at path");
     println("  umount <path>      - unmount filesystem");
     println("  help               - this help");
@@ -334,6 +338,42 @@ static void cmd_echo(int argc, char **argv)
 }
 
 
+static void cmd_exec(char *path)
+{
+    if (!path) { println("usage: exec <path>"); return; }
+
+    char rbuf[VFS_PATH_MAX];
+    path = (char *)resolve_path(path, rbuf, sizeof(rbuf));
+
+    struct vfs_file *f = vfs_open(path, VFS_O_READ);
+    if (!f)
+    {
+        print("exec: "); print(path); println(": open failed");
+        return;
+    }
+
+    uint64_t *pml4 = vmm_create_pml4();
+    if (!pml4)
+    {
+        println("exec: vmm_create_pml4 failed");
+        vfs_close(f);
+        return;
+    }
+
+    uint64_t entry = elf_load(f, pml4);
+    vfs_close(f);
+
+    if (!entry)
+    {
+        println("exec: elf_load failed");
+        return;
+    }
+
+    serial_printf("exec: starting 0x%p\n", (void*)entry);
+    exec_user(entry, pml4);
+    serial_printf("exec: process exited\n");
+}
+
 static int shell_tab_complete(char *buf, int *pos, int len, int max)
 {
     int cursor = *pos;
@@ -483,8 +523,10 @@ void shell_run(void)
             cmd_mount(argc - 1, argv + 1);
         else if (strcmp(argv[0], "umount") == 0)
             cmd_umount(argv[1]);
-        else if (strcmp(argv[0], "echo") == 0)
-            cmd_echo(argc - 1, argv + 1);
+    else if (strcmp(argv[0], "echo") == 0)
+        cmd_echo(argc - 1, argv + 1);
+    else if (strcmp(argv[0], "exec") == 0)
+        cmd_exec(argv[1]);
     else if (strcmp(argv[0], "shutdown") == 0)
         acpi_shutdown();
     else if (strcmp(argv[0], "reboot") == 0)
