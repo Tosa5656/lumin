@@ -89,13 +89,18 @@ struct fat32_fs {
 int  fat32_mount(struct block_device *bdev, struct fat32_fs *fs);
 int  fat32_read_cluster(struct fat32_fs *fs, uint32_t cluster, void *buf);
 int  fat32_read_dir(struct fat32_fs *fs, uint32_t cluster, uint32_t index, struct vfs_dentry *entry);
-int  fat32_lookup(struct fat32_fs *fs, uint32_t cluster, const char *name, uint32_t *out_cluster, uint32_t *out_size, int *out_dir);
+int  fat32_lookup(struct fat32_fs *fs, uint32_t cluster, const char *name,
+                  uint32_t *out_cluster, uint32_t *out_size, int *out_dir,
+                  uint32_t *out_sector, int *out_offset);
 int  fat32_read_file(struct fat32_fs *fs, uint32_t cluster, uint32_t size, uint64_t offset, uint64_t count, void *buf);
 
 int  fat32_write_file(struct fat32_fs *fs, uint32_t *cluster, uint32_t *size, uint64_t offset, uint64_t count, const void *buf);
 int  fat32_truncate(struct fat32_fs *fs, uint32_t *cluster, uint32_t *size, uint64_t new_size);
-int  fat32_create_file(struct fat32_fs *fs, uint32_t dir_cluster, const char *name, uint32_t *out_cluster);
+int  fat32_create_file(struct fat32_fs *fs, uint32_t dir_cluster, const char *name,
+                       uint32_t *out_cluster, uint32_t *out_sector, int *out_offset);
 int  fat32_unlink_file(struct fat32_fs *fs, uint32_t dir_cluster, const char *name);
+int  fat32_mkdir(struct fat32_fs *fs, uint32_t dir_cluster, const char *name,
+                 uint32_t *out_cluster, uint32_t *out_sector, int *out_offset);
 
 int  vfs_mount_fat32(const char *path, struct block_device *bdev);
 
