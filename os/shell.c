@@ -377,8 +377,10 @@ void shell_run(void)
             cmd_umount(argv[1]);
         else if (strcmp(argv[0], "echo") == 0)
             cmd_echo(argc - 1, argv + 1);
-        else if (strcmp(argv[0], "shutdown") == 0)
-            acpi_shutdown();
+    else if (strcmp(argv[0], "shutdown") == 0)
+        acpi_shutdown();
+    else if (strcmp(argv[0], "reboot") == 0)
+        acpi_reboot();
         else
         {
             print(argv[0]);

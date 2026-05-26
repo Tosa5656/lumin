@@ -2,5 +2,6 @@
 #define ACPI_H
 
 void acpi_shutdown(void);
+void acpi_reboot(void);
 
 #endif

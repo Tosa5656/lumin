@@ -116,18 +116,15 @@ static struct sdt_t *find_sdt(struct rsdp_t *rsdp, const char sig[4])
 static int parse_s5(const uint8_t *dsdt, uint32_t dsdt_len,
                     uint16_t *slp_typa, uint16_t *slp_typb)
 {
-    for (uint32_t i = 0; i < dsdt_len - 5; i++)
+    for (uint32_t i = 0; i < dsdt_len - 6; i++)
     {
-        if (dsdt[i] != 0x5C) continue;
-        if (dsdt[i+1] != 0x5F || dsdt[i+2] != 0x53 ||
-            dsdt[i+3] != 0x35 || dsdt[i+4] != 0x5F)
+        if (dsdt[i]   != 0x08) continue;
+        if (dsdt[i+1] != 0x5C) continue;
+        if (dsdt[i+2] != 0x5F || dsdt[i+3] != 0x53 ||
+            dsdt[i+4] != 0x35 || dsdt[i+5] != 0x5F)
             continue;
 
-        uint32_t pos = i + 5;
-        if (dsdt[pos] != 0x08)
-            continue;
-        pos++;
-
+        uint32_t pos = i + 6;
         if (dsdt[pos] != 0x12)
             continue;
         pos++;
@@ -229,4 +226,45 @@ void acpi_shutdown(void)
 
 halt:
     while (1) __asm__("hlt");
+}
+
+void acpi_reboot(void)
+{
+    __asm__ volatile("cli");
+
+    struct rsdp_t *rsdp = rsdp_find();
+    if (rsdp)
+    {
+        struct sdt_t *fadt_sdt = find_sdt(rsdp, "FACP");
+        if (fadt_sdt)
+        {
+            struct fadt_t *fadt = (struct fadt_t *)fadt_sdt;
+
+            if (fadt_sdt->revision >= 2)
+            {
+                uint8_t addr_space = fadt->reset_reg[0];
+                uint8_t width      = fadt->reset_reg[1];
+                uint64_t addr = 0;
+                for (int b = 0; b < 8; b++)
+                    addr |= (uint64_t)fadt->reset_reg[4 + b] << (b * 8);
+                uint8_t val  = fadt->reset_value;
+
+                if (addr && width)
+                {
+                    if (addr_space == 1)
+                        outb((uint16_t)addr, val);
+                    else if (addr_space == 0)
+                        *(volatile uint8_t *)(uint64_t)addr = val;
+
+                    for (volatile int w = 0; w < 100000; w++);
+                }
+            }
+        }
+    }
+
+    outb(0x64, 0xFE);
+    for (volatile int w = 0; w < 100000; w++);
+
+    __asm__ volatile("int3");
+    while (1);
 }
