@@ -4,7 +4,7 @@ AR = ar
 CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zone -mcmodel=large -I include
 
 CRT_OBJ = obj/crt0.o
-LIBC_OBJS = obj/syscall.o obj/errno/errno.o obj/stdlib/exit.o obj/stdlib/malloc.o \
+LIBC_OBJS = obj/errno/errno.o obj/stdlib/exit.o obj/stdlib/malloc.o \
             obj/string/mem.o obj/string/str.o obj/stdio/printf.o
 
 all: libc.a
@@ -14,9 +14,6 @@ mkdirs:
 
 obj/crt0.o: crt/crt0.asm
 	$(AS) -f elf64 $< -o $@
-
-obj/syscall.o: src/syscall.c
-	$(CC) $(CFLAGS) -c $< -o $@
 
 obj/errno/errno.o: src/errno/errno.c
 	$(CC) $(CFLAGS) -c $< -o $@

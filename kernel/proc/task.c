@@ -7,6 +7,9 @@
 uint64_t saved_kernel_rsp;
 uint64_t saved_kernel_cr3;
 
+uint64_t *current_pml4;
+uint64_t  current_brk;
+
 struct iretq_frame {
     uint64_t rip;
     uint64_t cs;
@@ -17,6 +20,8 @@ struct iretq_frame {
 
 int task_init(void)
 {
+    current_pml4 = 0;
+    current_brk  = 0;
     serial_write("task: initialized\n");
     return 0;
 }
@@ -62,6 +67,9 @@ void exec_user(uint64_t entry, uint64_t *pml4)
 
     serial_printf("exec: entry=0x%p kstack=0x%p ustack=0x%p\n",
                   (void*)entry, (void*)kstack, (void*)ustack);
+
+    current_pml4 = pml4;
+    current_brk  = USER_HEAP_START;
 
     if (pml4)
         vmm_load_pml4(pml4);

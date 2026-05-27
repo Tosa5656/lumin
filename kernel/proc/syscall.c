@@ -1,18 +1,22 @@
 #include "syscall.h"
 #include "task.h"
+#include "../mm/vmm.h"
+#include "../mm/pmm.h"
 #include "../drivers/serial/serial.h"
 #include "../drivers/vga/vga.h"
 
 #define SYS_READ  0
 #define SYS_WRITE 1
+#define SYS_BRK   45
 #define SYS_EXIT  60
 
 uint64_t syscall_entry(struct syscall_frame *frame)
 {
     uint64_t nr = frame->rax;
 
-    serial_printf("syscall: nr=%llu from RIP=0x%p\n",
-                  (unsigned long long)nr, (void*)frame->rip);
+    if (nr != SYS_WRITE)
+        serial_printf("syscall: nr=%llu from RIP=0x%p\n",
+                      (unsigned long long)nr, (void*)frame->rip);
 
     switch (nr)
     {
@@ -36,6 +40,46 @@ uint64_t syscall_entry(struct syscall_frame *frame)
 
         case SYS_READ:
             return 0;
+
+        case SYS_BRK:
+        {
+            uint64_t new_brk = frame->rdi;
+
+            if (new_brk == 0)
+                return current_brk;
+
+            if (new_brk < USER_HEAP_START)
+                return -1;
+
+            if (new_brk < current_brk)
+            {
+                current_brk = new_brk;
+                return current_brk;
+            }
+
+            uint64_t start_page = (current_brk + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+            uint64_t end_page   = (new_brk + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+            for (uint64_t virt = start_page; virt < end_page; virt += PAGE_SIZE)
+            {
+                void *phys = pmm_alloc();
+                if (!phys)
+                {
+                    serial_write("brk: pmm_alloc failed\n");
+                    return -1;
+                }
+
+                if (vmm_map_page(current_pml4, virt, (uint64_t)phys, PAGE_USER | PAGE_WRITE) != 0)
+                {
+                    serial_write("brk: vmm_map_page failed\n");
+                    pmm_free(phys);
+                    return -1;
+                }
+            }
+
+            current_brk = new_brk;
+            return current_brk;
+        }
 
         case SYS_EXIT:
         {

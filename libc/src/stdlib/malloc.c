@@ -1,26 +1,21 @@
+#include <sys/syscall.h>
 #include <errno.h>
 
-#define POOL_SIZE (64 * 1024)
-
-static char pool[POOL_SIZE];
-static unsigned long used;
+#define ALIGN8(x) (((x) + 7) & ~7)
 
 void *malloc(unsigned long size)
 {
     if (size == 0)
         return 0;
 
-    if (size % 8)
-        size += 8 - (size % 8);
+    size = ALIGN8(size);
 
-    if (used + size > POOL_SIZE)
+    void *ptr = sbrk(size);
+    if (ptr == (void *)-1)
     {
         errno = ENOMEM;
         return 0;
     }
-
-    void *ptr = pool + used;
-    used += size;
     return ptr;
 }
 
@@ -52,13 +47,18 @@ void *realloc(void *ptr, unsigned long size)
         return 0;
     }
 
+    size = ALIGN8(size);
+
     void *new = malloc(size);
     if (new)
     {
         char *src = (char *)ptr;
         char *dst = (char *)new;
-        unsigned long old_size = (unsigned long)((char *)&pool[used] - (char *)ptr);
+
+        long old_brk = syscall(SYS_brk, 0, 0, 0);
+        unsigned long old_size = (unsigned long)((char *)old_brk - (char *)ptr);
         unsigned long copy = old_size < size ? old_size : size;
+
         for (unsigned long i = 0; i < copy; i++)
             dst[i] = src[i];
     }
