@@ -15,7 +15,7 @@
 #include "fs/vfs.h"
 #include "fs/fat32.h"
 #include "keyboard.h"
-#include "shell.h"
+
 
 unsigned char keyboard_color;
 
@@ -143,5 +143,4 @@ void kmain(void)
     keyboard_init();
 
     serial_write("shell: starting...\n");
-    shell_run();
 }

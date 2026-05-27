@@ -52,8 +52,6 @@ obj/task.o: kernel/proc/task.c
 obj/syscall.o: kernel/proc/syscall.c
 	${CC} ${CFLAGS} -c $< -o $@
 
-obj/shell.o: os/shell.c
-	${CC} ${CFLAGS} -c $< -o $@
 obj/keyboard.o: os/keyboard.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/vga.o: kernel/drivers/vga/vga.c
@@ -84,7 +82,7 @@ obj/fat32.o: kernel/fs/fat32.c
 OBJS = obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/kprintf.o \
        obj/panic.o obj/acpi.o obj/gdt.o obj/idt.o obj/pmm.o obj/kmalloc.o \
        obj/vmm.o obj/elf.o obj/task.o obj/syscall.o \
-       obj/shell.o obj/keyboard.o obj/vga.o obj/serial.o obj/rtc.o \
+       obj/keyboard.o obj/vga.o obj/serial.o obj/rtc.o \
        obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o \
        obj/pci.o obj/ata.o obj/block.o obj/vfs.o obj/fat32.o
 
