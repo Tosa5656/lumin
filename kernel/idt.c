@@ -5,6 +5,7 @@
 #include "drivers/timer/timer.h"
 #include "drivers/serial/serial.h"
 #include "drivers/vga/vga.h"
+#include "proc/task.h"
 
 #define IDT_SIZE 256
 
@@ -103,29 +104,28 @@ void exception_handler(int vec, struct exception_frame *frame)
     panic(name, msg);
 }
 
-void irq_handler(uint64_t int_no)
+uint64_t irq_handler(int int_no, uint64_t *pushaq_frame)
 {
     if (int_no == 32)
     {
         timer_tick_handler();
         timer_eoi();
+
+        return schedule((uint64_t)pushaq_frame);
     }
     else if (int_no == 33)
     {
         keyboard_handler();
         outb(0x20, 0x20);
+        return (uint64_t)pushaq_frame;
     }
-    else if (int_no == 48)
+    else if (int_no >= 40)
     {
-        timer_tick_handler();
-        timer_eoi();
+        outb(0xA0, 0x20);
     }
-    else
-    {
-        if (int_no >= 40)
-            outb(0xA0, 0x20);
-        outb(0x20, 0x20);
-    }
+
+    outb(0x20, 0x20);
+    return (uint64_t)pushaq_frame;
 }
 
 void idt_init(void)

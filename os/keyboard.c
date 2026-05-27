@@ -161,6 +161,20 @@ void keyboard_set_tab_complete(tab_complete_fn fn)
     tab_complete_hook = fn;
 }
 
+int keyboard_avail(void)
+{
+    return keybuf_tail != keybuf_head;
+}
+
+int keyboard_dequeue(void)
+{
+    if (keybuf_tail == keybuf_head)
+        return -1;
+    unsigned char c = keybuf[keybuf_tail];
+    keybuf_tail = (keybuf_tail + 1) & (KEYBUF_SIZE - 1);
+    return c;
+}
+
 static void vga_redraw_line(const char *buf, int idx, int cursor,
                             int start_row, int start_col)
 {

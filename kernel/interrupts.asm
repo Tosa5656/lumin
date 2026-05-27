@@ -90,7 +90,9 @@ global isr32_handler
 isr32_handler:
     pushaq
     mov rdi, 32
+    mov rsi, rsp
     call irq_handler
+    mov rsp, rax
     popaq
     iretq
 
@@ -98,7 +100,9 @@ global isr33_handler
 isr33_handler:
     pushaq
     mov rdi, 33
+    mov rsi, rsp
     call irq_handler
+    mov rsp, rax
     popaq
     iretq
 

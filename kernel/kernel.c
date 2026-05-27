@@ -32,36 +32,21 @@ static const char *timer_name(enum timer_type t)
 
 static void run_init(void)
 {
-    struct vfs_file *f = vfs_open("/mnt/init.elf", VFS_O_READ);
-    if (!f)
+    int pid = task_create_user("/mnt/shell.elf");
+    if (pid < 0)
     {
-        serial_write("init: /mnt/init.elf not found\n");
+        serial_write("init: failed to create task\n");
         return;
     }
 
-    uint64_t *pml4 = vmm_create_pml4();
-    if (!pml4)
-    {
-        serial_write("init: vmm_create_pml4 failed\n");
-        vfs_close(f);
-        return;
-    }
-
-    uint64_t entry = elf_load(f, pml4);
-    vfs_close(f);
-
-    if (!entry)
-    {
-        serial_write("init: elf_load failed\n");
-        return;
-    }
-
-    serial_printf("init: entry=0x%p, starting...\n", (void*)entry);
+    serial_write("init: task created, switching to userspace...\n");
 
     __asm__("sti");
-    exec_user(entry, pml4);
 
-    serial_write("init: returned from userspace\n");
+    for (;;)
+    {
+        __asm__ volatile("sti; hlt");
+    }
 }
 
 void kmain(void)

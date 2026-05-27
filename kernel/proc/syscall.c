@@ -4,19 +4,19 @@
 #include "../mm/pmm.h"
 #include "../drivers/serial/serial.h"
 #include "../drivers/vga/vga.h"
+#include "keyboard.h"
 
-#define SYS_READ  0
-#define SYS_WRITE 1
-#define SYS_BRK   45
-#define SYS_EXIT  60
+#define SYS_READ   0
+#define SYS_WRITE  1
+#define SYS_YIELD  24
+#define SYS_GETPID 39
+#define SYS_BRK    45
+#define SYS_FORK   57
+#define SYS_EXIT   60
 
-uint64_t syscall_entry(struct syscall_frame *frame)
+uint64_t syscall_entry(struct pushaq_frame *frame)
 {
     uint64_t nr = frame->rax;
-
-    if (nr != SYS_WRITE)
-        serial_printf("syscall: nr=%llu from RIP=0x%p\n",
-                      (unsigned long long)nr, (void*)frame->rip);
 
     switch (nr)
     {
@@ -39,66 +39,83 @@ uint64_t syscall_entry(struct syscall_frame *frame)
         }
 
         case SYS_READ:
-            return 0;
+        {
+            int fd = (int)frame->rdi;
+            char *buf = (char *)frame->rsi;
+            uint64_t count = frame->rdx;
+
+            if (fd != 0)
+                return -1;
+
+            uint64_t read = 0;
+            while (read < count)
+            {
+                while (!keyboard_avail())
+                    __asm__ volatile("sti; hlt; cli");
+
+                int c = keyboard_dequeue();
+                if (c < 0) continue;
+
+                buf[read++] = (char)c;
+            }
+            return read;
+        }
 
         case SYS_BRK:
         {
             uint64_t new_brk = frame->rdi;
 
+            if (!current_task || current_task->pid == 0)
+                return -1;
+
             if (new_brk == 0)
-                return current_brk;
+                return current_task->brk;
 
             if (new_brk < USER_HEAP_START)
                 return -1;
 
-            if (new_brk < current_brk)
+            if (new_brk < current_task->brk)
             {
-                current_brk = new_brk;
-                return current_brk;
+                current_task->brk = new_brk;
+                return current_task->brk;
             }
 
-            uint64_t start_page = (current_brk + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+            uint64_t start_page = (current_task->brk + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
             uint64_t end_page   = (new_brk + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
             for (uint64_t virt = start_page; virt < end_page; virt += PAGE_SIZE)
             {
                 void *phys = pmm_alloc();
                 if (!phys)
-                {
-                    serial_write("brk: pmm_alloc failed\n");
                     return -1;
-                }
 
-                if (vmm_map_page(current_pml4, virt, (uint64_t)phys, PAGE_USER | PAGE_WRITE) != 0)
+                if (vmm_map_page(current_task->pml4, virt, (uint64_t)phys, PAGE_USER | PAGE_WRITE) != 0)
                 {
-                    serial_write("brk: vmm_map_page failed\n");
                     pmm_free(phys);
                     return -1;
                 }
             }
 
-            current_brk = new_brk;
-            return current_brk;
+            current_task->brk = new_brk;
+            return current_task->brk;
         }
+
+        case SYS_GETPID:
+            return task_getpid();
+
+        case SYS_YIELD:
+            return 0;
+
+        case SYS_FORK:
+            return task_fork(frame);
 
         case SYS_EXIT:
-        {
-            serial_printf("syscall: exit(%llu)\n", (unsigned long long)frame->rdi);
-            __asm__ volatile(
-                "cli\n"
-                "mov %0, %%cr3\n"
-                "mov %1, %%rsp\n"
-                "pop %%rbp\n"
-                "ret\n"
-                : : "r"(saved_kernel_cr3), "r"(saved_kernel_rsp)
-                : "memory"
-            );
-            __builtin_unreachable();
+            task_exit((int)frame->rdi);
             return 0;
-        }
 
         default:
-            serial_printf("syscall: unknown nr %llu\n", (unsigned long long)nr);
+            serial_printf("syscall: unknown nr %llu from pid=%d\n",
+                          (unsigned long long)nr, current_task ? current_task->pid : -1);
             return -1;
     }
 }

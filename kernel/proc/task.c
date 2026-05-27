@@ -1,86 +1,384 @@
 #include "task.h"
+#include "elf.h"
 #include "../mm/vmm.h"
 #include "../mm/pmm.h"
 #include "../gdt.h"
 #include "../drivers/serial/serial.h"
+#include "../drivers/vga/vga.h"
+#include "../fs/vfs.h"
 
-uint64_t saved_kernel_rsp;
-uint64_t saved_kernel_cr3;
+static struct task tasks[MAX_TASKS];
+static int next_pid = 1;
+static int task_count = 0;
+static int current_idx = 0;
 
-uint64_t *current_pml4;
-uint64_t  current_brk;
+struct task *current_task = NULL;
 
-struct iretq_frame {
-    uint64_t rip;
-    uint64_t cs;
-    uint64_t rflags;
-    uint64_t rsp;
-    uint64_t ss;
-};
+static struct task *alloc_task(void)
+{
+    for (int i = 0; i < MAX_TASKS; i++)
+    {
+        if (tasks[i].state == TASK_FREE)
+            return &tasks[i];
+    }
+    return NULL;
+}
+
+static int find_task_idx(struct task *t)
+{
+    for (int i = 0; i < MAX_TASKS; i++)
+    {
+        if (&tasks[i] == t)
+            return i;
+    }
+    return -1;
+}
 
 int task_init(void)
 {
-    current_pml4 = 0;
-    current_brk  = 0;
-    serial_write("task: initialized\n");
+    for (int i = 0; i < MAX_TASKS; i++)
+        tasks[i].state = TASK_FREE;
+
+    tasks[0].pid          = 0;
+    tasks[0].state        = TASK_READY;
+    tasks[0].pml4         = NULL;
+    tasks[0].kstack_page  = NULL;
+    tasks[0].ustack_page  = NULL;
+    tasks[0].brk          = 0;
+    tasks[0].parent_pid   = -1;
+
+    __asm__ volatile("mov %%rsp, %0"  : "=r"(tasks[0].kernel_rsp));
+    __asm__ volatile("mov %%cr3, %0"  : "=r"(tasks[0].kernel_cr3));
+
+    current_task = &tasks[0];
+    current_idx  = 0;
+    task_count   = 1;
+    next_pid     = 1;
+
+    serial_write("scheduler: initialized (task 0 = kernel)\n");
     return 0;
 }
 
-void exec_user(uint64_t entry, uint64_t *pml4)
+int task_create_user(const char *path)
 {
-    __asm__ volatile("mov %%rbp, %0" : "=r"(saved_kernel_rsp) : : "memory");
-    __asm__ volatile("mov %%cr3, %0" : "=r"(saved_kernel_cr3) : : "memory");
+    if (!path)
+        return -1;
+
+    struct vfs_file *f = vfs_open(path, VFS_O_READ);
+    if (!f)
+    {
+        serial_printf("task_create: cannot open '%s'\n", path);
+        return -1;
+    }
+
+    uint64_t *pml4 = vmm_create_pml4();
+    if (!pml4)
+    {
+        serial_write("task_create: vmm_create_pml4 failed\n");
+        vfs_close(f);
+        return -1;
+    }
+
+    uint64_t entry = elf_load(f, pml4);
+    vfs_close(f);
+
+    if (!entry)
+    {
+        serial_write("task_create: elf_load failed\n");
+        return -1;
+    }
+
+    struct task *t = alloc_task();
+    if (!t)
+    {
+        serial_write("task_create: no free task slot\n");
+        return -1;
+    }
 
     void *kstack = pmm_alloc();
-    if (!kstack)
+    void *ustack = pmm_alloc();
+    if (!kstack || !ustack)
     {
-        serial_write("exec: pmm_alloc kstack failed\n");
-        return;
+        serial_write("task_create: pmm_alloc failed\n");
+        if (kstack) pmm_free(kstack);
+        if (ustack) pmm_free(ustack);
+        return -1;
     }
 
     uint64_t kstack_top = (uint64_t)kstack + 0x1000;
+    uint64_t us_vaddr   = USER_BASE_VADDR + 0x1000000000ULL;
 
-    void *ustack = pmm_alloc();
-    if (!ustack)
-    {
-        serial_write("exec: pmm_alloc ustack failed\n");
-        return;
-    }
-
-    uint64_t us_vaddr = USER_BASE_VADDR + 0x1000000000ULL;
     if (vmm_map_page(pml4, us_vaddr - 0x1000, (uint64_t)ustack, PAGE_USER | PAGE_WRITE) != 0)
     {
-        serial_write("exec: failed to map user stack\n");
-        return;
+        serial_write("task_create: map ustack failed\n");
+        pmm_free(kstack);
+        pmm_free(ustack);
+        return -1;
     }
 
-    uint64_t *area = (uint64_t *)(kstack_top - 15 * 8 - 5 * 8);
+    uint64_t *sp = (uint64_t *)(kstack_top - 5 * 8);
+    sp[0] = entry;
+    sp[1] = GDT_UCODE | 3;
+    sp[2] = 0x202;
+    sp[3] = us_vaddr;
+    sp[4] = GDT_UDATA | 3;
+
+    sp -= 15;
     for (int i = 0; i < 15; i++)
-        area[i] = 0;
-    area[15] = entry;
-    area[16] = GDT_UCODE | 3;
-    area[17] = 0x202;
-    area[18] = us_vaddr;
-    area[19] = GDT_UDATA | 3;
+        sp[i] = 0;
 
-    gdt_set_kstack((uint64_t)kstack + 0x1000);
+    t->pid          = next_pid++;
+    t->state        = TASK_READY;
+    t->kernel_rsp   = (uint64_t)sp;
+    t->kernel_cr3   = tasks[0].kernel_cr3;
+    t->pml4         = pml4;
+    t->brk          = USER_HEAP_START;
+    t->kstack_page  = kstack;
+    t->ustack_page  = ustack;
+    t->exit_code    = 0;
+    t->parent_pid   = 0;
 
-    serial_printf("exec: entry=0x%p kstack=0x%p ustack=0x%p\n",
-                  (void*)entry, (void*)kstack, (void*)ustack);
+    task_count++;
 
-    current_pml4 = pml4;
-    current_brk  = USER_HEAP_START;
+    serial_printf("task_create: pid=%d entry=0x%p\n", t->pid, (void*)entry);
+    return t->pid;
+}
 
-    if (pml4)
-        vmm_load_pml4(pml4);
+void task_exit(int code)
+{
+    if (!current_task || current_task->pid == 0)
+    {
+        serial_printf("exit(%d) in kernel task, halting\n", code);
+        __asm__("cli; hlt");
+        while (1) {}
+    }
+
+    serial_printf("task_exit: pid=%d code=%d\n", current_task->pid, code);
+    current_task->state = TASK_ZOMBIE;
+    current_task->exit_code = code;
+
+    if (current_task->kstack_page)
+        pmm_free(current_task->kstack_page);
+    if (current_task->ustack_page)
+        pmm_free(current_task->ustack_page);
+
+    current_task->kstack_page = NULL;
+    current_task->ustack_page = NULL;
+
+    uint64_t kernel_cr3 = tasks[0].kernel_cr3;
+    uint64_t kernel_rsp = tasks[0].kernel_rsp;
+
+    tasks[0].state = TASK_RUNNING;
+    current_task = &tasks[0];
+    current_idx  = 0;
 
     __asm__ volatile(
-        "mov %0, %%rsp\n"
-        "pop %%r15\n  pop %%r14\n  pop %%r13\n  pop %%r12\n"
-        "pop %%r11\n  pop %%r10\n  pop %%r9\n   pop %%r8\n"
-        "pop %%rbp\n  pop %%rdi\n  pop %%rsi\n  pop %%rdx\n"
-        "pop %%rcx\n  pop %%rbx\n  pop %%rax\n"
-        "iretq\n"
-        : : "r"((uint64_t)area) : "memory"
+        "cli\n"
+        "mov %0, %%cr3\n"
+        "mov %1, %%rsp\n"
+        : : "r"(kernel_cr3), "r"(kernel_rsp)
+        : "memory"
     );
+
+    __builtin_unreachable();
+}
+
+int task_fork(struct pushaq_frame *frame)
+{
+    if (!current_task)
+        return -1;
+
+    struct task *t = alloc_task();
+    if (!t)
+        return -1;
+
+    uint64_t *pml4 = vmm_create_pml4();
+    if (!pml4)
+        return -1;
+
+    for (int i = 256; i < 512; i++)
+    {
+        uint64_t *pt;
+        __asm__("mov %%cr3, %%rax; mov %%rax, %0" : "=r"(pt));
+        (void)pt;
+    }
+
+    void *kstack = pmm_alloc();
+    void *ustack = pmm_alloc();
+    if (!kstack || !ustack)
+    {
+        if (kstack) pmm_free(kstack);
+        if (ustack) pmm_free(ustack);
+        return -1;
+    }
+
+    uint64_t kstack_top = (uint64_t)kstack + 0x1000;
+    uint64_t us_vaddr   = USER_BASE_VADDR + 0x1000000000ULL;
+
+    uint64_t *parent_kstack = (uint64_t *)current_task->kernel_rsp;
+    uint64_t frame_words = 15;
+    if ((parent_kstack[16] & 3) == 3)
+        frame_words = 20;
+
+    uint64_t *sp = (uint64_t *)(kstack_top - frame_words * 8);
+    for (uint64_t i = 0; i < frame_words; i++)
+        sp[i] = parent_kstack[i];
+
+    sp[14] = 0;
+
+    uint64_t parent_cr3_val;
+    __asm__("mov %%cr3, %0" : "=r"(parent_cr3_val));
+    uint64_t *parent_pml4_phys = (uint64_t *)(uintptr_t)parent_cr3_val;
+
+    for (int pml4_idx = 0; pml4_idx < 256; pml4_idx++)
+    {
+        uint64_t pml4e = parent_pml4_phys[pml4_idx];
+        if (!(pml4e & PAGE_PRESENT))
+            continue;
+
+        uint64_t *pdpt = (uint64_t *)(uintptr_t)(pml4e & ~0xFFFULL);
+        for (int pdpt_idx = 0; pdpt_idx < 512; pdpt_idx++)
+        {
+            uint64_t pdpte = pdpt[pdpt_idx];
+            if (!(pdpte & PAGE_PRESENT))
+                continue;
+
+            if (pdpte & PAGE_HUGE)
+            {
+                void *phys = pmm_alloc();
+                if (!phys) return -1;
+
+                uint64_t vaddr = ((uint64_t)pml4_idx << 39) | ((uint64_t)pdpt_idx << 30);
+                vmm_map_page(pml4, vaddr, (uint64_t)phys, pdpte & 0xFFF);
+
+                void *src = (void *)(uintptr_t)(pdpte & ~0xFFFULL);
+                for (uint64_t o = 0; o < 0x40000000; o += 8)
+                    ((uint64_t *)phys)[o / 8] = ((uint64_t *)src)[o / 8];
+                continue;
+            }
+
+            uint64_t *pd = (uint64_t *)(uintptr_t)(pdpte & ~0xFFFULL);
+            for (int pd_idx = 0; pd_idx < 512; pd_idx++)
+            {
+                uint64_t pde = pd[pd_idx];
+                if (!(pde & PAGE_PRESENT))
+                    continue;
+
+                if (pde & PAGE_HUGE)
+                {
+                    void *phys = pmm_alloc();
+                    if (!phys) return -1;
+
+                    uint64_t vaddr = ((uint64_t)pml4_idx << 39) | ((uint64_t)pdpt_idx << 30) | ((uint64_t)pd_idx << 21);
+                    vmm_map_page(pml4, vaddr, (uint64_t)phys, pde & 0xFFF);
+
+                    void *src = (void *)(uintptr_t)(pde & ~0xFFFULL);
+                    for (uint64_t o = 0; o < 0x200000; o += 8)
+                        ((uint64_t *)phys)[o / 8] = ((uint64_t *)src)[o / 8];
+                    continue;
+                }
+
+                uint64_t *pt = (uint64_t *)(uintptr_t)(pde & ~0xFFFULL);
+                for (int pt_idx = 0; pt_idx < 512; pt_idx++)
+                {
+                    uint64_t pte = pt[pt_idx];
+                    if (!(pte & PAGE_PRESENT))
+                        continue;
+
+                    void *phys = pmm_alloc();
+                    if (!phys) return -1;
+
+                    uint64_t vaddr = ((uint64_t)pml4_idx << 39) | ((uint64_t)pdpt_idx << 30) |
+                                     ((uint64_t)pd_idx << 21) | ((uint64_t)pt_idx << 12);
+                    vmm_map_page(pml4, vaddr, (uint64_t)phys, pte & 0xFFF);
+
+                    void *src = (void *)(uintptr_t)(pte & ~0xFFFULL);
+                    for (uint64_t o = 0; o < 0x1000; o += 8)
+                        ((uint64_t *)phys)[o / 8] = ((uint64_t *)src)[o / 8];
+                }
+            }
+        }
+    }
+
+    vmm_map_page(pml4, us_vaddr - 0x1000, (uint64_t)ustack, PAGE_USER | PAGE_WRITE);
+
+    int child_pid = next_pid++;
+    t->pid         = child_pid;
+    t->state       = TASK_READY;
+    t->kernel_rsp  = (uint64_t)sp;
+    t->kernel_cr3  = current_task->kernel_cr3;
+    t->pml4        = pml4;
+    t->brk         = current_task->brk;
+    t->kstack_page = kstack;
+    t->ustack_page = ustack;
+    t->exit_code   = 0;
+    t->parent_pid  = current_task->pid;
+
+    task_count++;
+    serial_printf("fork: child pid=%d\n", child_pid);
+    return child_pid;
+}
+
+int task_getpid(void)
+{
+    if (!current_task) return -1;
+    return current_task->pid;
+}
+
+void task_yield(void)
+{
+    __asm__ volatile("int $0x30" : : "a"(45), "D"(0), "S"(0), "d"(0) : "memory");
+}
+
+uint64_t schedule(uint64_t current_rsp)
+{
+    if (task_count <= 1)
+    {
+        if (current_task)
+            current_task->kernel_rsp = current_rsp;
+        return current_rsp;
+    }
+
+    if (current_task && current_task->state == TASK_RUNNING)
+    {
+        current_task->kernel_rsp = current_rsp;
+        current_task->state = TASK_READY;
+    }
+
+    for (int i = 1; i < MAX_TASKS; i++)
+    {
+        int idx = (current_idx + i) % MAX_TASKS;
+        if (tasks[idx].state == TASK_READY)
+        {
+            current_idx  = idx;
+            current_task = &tasks[idx];
+            current_task->state = TASK_RUNNING;
+
+            if (current_task->pml4)
+                vmm_load_pml4(current_task->pml4);
+            else
+            {
+                uint64_t kcr3;
+                __asm__("mov %%cr3, %0" : "=r"(kcr3));
+                if (kcr3 != tasks[0].kernel_cr3)
+                    __asm__ volatile("mov %0, %%cr3" : : "r"(tasks[0].kernel_cr3) : "memory");
+            }
+
+            if (current_task->kstack_page)
+                gdt_set_kstack((uint64_t)current_task->kstack_page + 0x1000);
+
+            return current_task->kernel_rsp;
+        }
+    }
+
+    current_task = &tasks[0];
+    current_idx  = 0;
+    tasks[0].state = TASK_RUNNING;
+
+    uint64_t kcr3;
+    __asm__("mov %%cr3, %0" : "=r"(kcr3));
+    if (kcr3 != tasks[0].kernel_cr3)
+        __asm__ volatile("mov %0, %%cr3" : : "r"(tasks[0].kernel_cr3) : "memory");
+
+    return tasks[0].kernel_rsp;
 }

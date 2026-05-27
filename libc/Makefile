@@ -5,12 +5,13 @@ CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zo
 
 CRT_OBJ = obj/crt0.o
 LIBC_OBJS = obj/errno/errno.o obj/stdlib/exit.o obj/stdlib/malloc.o \
-            obj/string/mem.o obj/string/str.o obj/stdio/printf.o
+            obj/string/mem.o obj/string/str.o obj/stdio/printf.o \
+            obj/unistd/unistd.o
 
 all: libc.a
 
 mkdirs:
-	mkdir -p obj obj/errno obj/stdlib obj/string obj/stdio
+	mkdir -p obj obj/errno obj/stdlib obj/string obj/stdio obj/unistd
 
 obj/crt0.o: crt/crt0.asm
 	$(AS) -f elf64 $< -o $@
@@ -31,6 +32,9 @@ obj/string/str.o: src/string/str.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 obj/stdio/printf.o: src/stdio/printf.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+obj/unistd/unistd.o: src/unistd/unistd.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 libc.a: mkdirs $(CRT_OBJ) $(LIBC_OBJS)

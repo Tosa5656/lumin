@@ -16,5 +16,7 @@ typedef int (*tab_complete_fn)(char *buf, int *pos, int len, int max);
 void keyboard_init(void);
 int keyboard_readline(char *buf, int max);
 void keyboard_set_tab_complete(tab_complete_fn fn);
+int keyboard_dequeue(void);
+int keyboard_avail(void);
 
 #endif

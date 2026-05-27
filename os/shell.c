@@ -345,33 +345,18 @@ static void cmd_exec(char *path)
     char rbuf[VFS_PATH_MAX];
     path = (char *)resolve_path(path, rbuf, sizeof(rbuf));
 
-    struct vfs_file *f = vfs_open(path, VFS_O_READ);
-    if (!f)
+    int pid = task_create_user(path);
+    if (pid < 0)
     {
-        print("exec: "); print(path); println(": open failed");
+        print("exec: failed to create task for '");
+        print(path);
+        println("'");
         return;
     }
 
-    uint64_t *pml4 = vmm_create_pml4();
-    if (!pml4)
-    {
-        println("exec: vmm_create_pml4 failed");
-        vfs_close(f);
-        return;
-    }
-
-    uint64_t entry = elf_load(f, pml4);
-    vfs_close(f);
-
-    if (!entry)
-    {
-        println("exec: elf_load failed");
-        return;
-    }
-
-    serial_printf("exec: starting 0x%p\n", (void*)entry);
-    exec_user(entry, pml4);
-    serial_printf("exec: process exited\n");
+    serial_printf("exec: pid=%d started, yielding...\n", pid);
+    task_yield();
+    serial_printf("exec: pid=%d completed\n", pid);
 }
 
 static int shell_tab_complete(char *buf, int *pos, int len, int max)
