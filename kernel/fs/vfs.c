@@ -164,14 +164,32 @@ int vfs_mount(const char *path, struct vfs_superblock *sb)
 
 struct vfs_file *vfs_open(const char *path, int flags)
 {
-    if (!path || file_count >= VFS_FILE_MAX)
+    if (!path)
         return NULL;
 
     struct vfs_inode *inode = NULL;
     if (resolve_full(path, &inode) != 0)
         return NULL;
 
-    struct vfs_file *f = &file_table[file_count++];
+    int idx = -1;
+    for (int i = 0; i < VFS_FILE_MAX; i++)
+    {
+        if (file_table[i].inode == NULL)
+        {
+            idx = i;
+            break;
+        }
+    }
+    if (idx < 0)
+    {
+        vfs_inode_unref(inode);
+        return NULL;
+    }
+
+    if (idx >= file_count)
+        file_count = idx + 1;
+
+    struct vfs_file *f = &file_table[idx];
     f->inode = inode;
     f->offset = 0;
     f->flags = flags;

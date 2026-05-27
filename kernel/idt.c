@@ -3,6 +3,7 @@
 #include "panic.h"
 #include "kprintf.h"
 #include "drivers/timer/timer.h"
+#include "drivers/timer/lapic.h"
 #include "drivers/serial/serial.h"
 #include "drivers/vga/vga.h"
 #include "proc/task.h"
@@ -13,6 +14,7 @@ static struct idt_entry_t idt[IDT_SIZE] __attribute__((aligned(16)));
 
 extern void isr32_handler(void);
 extern void isr33_handler(void);
+extern void isr34_handler(void);
 extern void isr48_handler(void);
 
 extern void exc0_handler(void);
@@ -119,6 +121,13 @@ uint64_t irq_handler(int int_no, uint64_t *pushaq_frame)
         outb(0x20, 0x20);
         return (uint64_t)pushaq_frame;
     }
+    else if (int_no == 34)
+    {
+        timer_tick_handler();
+        lapic_eoi();
+
+        return schedule((uint64_t)pushaq_frame);
+    }
     else if (int_no >= 40)
     {
         outb(0xA0, 0x20);
@@ -155,6 +164,7 @@ void idt_init(void)
 
     idt_set_entry(32, isr32_handler, 0x08, 0x8E);
     idt_set_entry(33, isr33_handler, 0x08, 0x8E);
+    idt_set_entry(34, isr34_handler, 0x08, 0x8E);
     idt_set_entry(48, isr48_handler, 0x08, 0xEE);
 
     struct idt_ptr_t idt_ptr;

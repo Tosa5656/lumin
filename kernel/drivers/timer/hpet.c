@@ -28,7 +28,6 @@ struct __attribute__((packed)) hpet_table_t
 #define HPET_T0_COMP  0x108
 
 static volatile uint64_t *hpet_base;
-static volatile uint64_t ticks;
 static int               hpet_ok;
 
 #define MAPPED_LIMIT 0x200000
@@ -109,20 +108,9 @@ int hpet_init(uint32_t hz)
     uint64_t main_cnt = hpet_base[HPET_MAIN_CNT / 8];
     hpet_base[HPET_T0_COMP / 8] = main_cnt + comp;
 
-    ticks = 0;
     hpet_ok = 1;
 
     outb(0x21, 0xFC);
     return 0;
 }
 
-void hpet_tick(void)
-{
-    if (hpet_ok)
-        ticks++;
-}
-
-uint64_t hpet_get_ticks(void)
-{
-    return ticks;
-}

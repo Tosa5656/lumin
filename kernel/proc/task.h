@@ -38,7 +38,7 @@ struct task {
 };
 
 int  task_init(void);
-int  task_create_user(const char *path);
+int  task_create_user(const char *path, int argc, char **argv);
 void task_exit(int code);
 int  task_fork(struct pushaq_frame *frame);
 int  task_getpid(void);

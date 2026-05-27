@@ -6,8 +6,8 @@ extern main
 extern exit
 
 _start:
-    xor rdi, rdi
-    xor rsi, rsi
+    mov rdi, [rsp]
+    lea rsi, [rsp + 8]
     call main
     mov rdi, rax
     call exit

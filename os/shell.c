@@ -338,14 +338,14 @@ static void cmd_echo(int argc, char **argv)
 }
 
 
-static void cmd_exec(char *path)
+static void cmd_exec(int argc, char **argv)
 {
-    if (!path) { println("usage: exec <path>"); return; }
+    if (argc < 1) { println("usage: exec <path> [args...]"); return; }
 
     char rbuf[VFS_PATH_MAX];
-    path = (char *)resolve_path(path, rbuf, sizeof(rbuf));
+    char *path = (char *)resolve_path(argv[0], rbuf, sizeof(rbuf));
 
-    int pid = task_create_user(path);
+    int pid = task_create_user(path, argc, argv);
     if (pid < 0)
     {
         print("exec: failed to create task for '");
@@ -511,7 +511,7 @@ void shell_run(void)
     else if (strcmp(argv[0], "echo") == 0)
         cmd_echo(argc - 1, argv + 1);
     else if (strcmp(argv[0], "exec") == 0)
-        cmd_exec(argv[1]);
+        cmd_exec(argc - 1, argv + 1);
     else if (strcmp(argv[0], "shutdown") == 0)
         acpi_shutdown();
     else if (strcmp(argv[0], "reboot") == 0)
