@@ -10,6 +10,7 @@ CAT = cat
 
 clean:
 	rm -rf bin obj kernel.bin
+	$(MAKE) -C libc clean
 
 mkdirs:
 	mkdir -p bin obj
@@ -93,15 +94,21 @@ kernel: mkdirs bootloader $(OBJS)
 	${CAT} bin/bootloader.bin bin/kernel.bin > lumin.bin
 
 USER_CC = x86_64-pc-linux-gnu-gcc
-USER_CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zone -mcmodel=large
+USER_CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zone -mcmodel=large -I libc/include
 USER_LDFLAGS = -m64 -no-pie -nostdlib -mcmodel=large -Wl,-Ttext-segment=0x8000000000,-e,_start
 
-user/init.elf: user/init.c
-	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $<
+LIBC = libc/libc.a
+LIBC_CRT0 = libc/obj/crt0.o
+
+libc/libc.a:
+	$(MAKE) -C libc
+
+user/init.elf: user/init.c $(LIBC)
+	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
 	chmod -x $@
 
-user/hello.elf: user/hello.c
-	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $<
+user/hello.elf: user/hello.c $(LIBC)
+	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
 	chmod -x $@
 
 fat32.img: user/init.elf user/hello.elf
