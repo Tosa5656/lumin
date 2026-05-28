@@ -3,7 +3,7 @@
 #include <string.h>
 #include <sys/syscall.h>
 
-#define MAX_PATH_LEN 256
+#define MAX_PATH_LEN 512
 
 int main(int argc, char **argv)
 {
@@ -11,15 +11,30 @@ int main(int argc, char **argv)
     char cwd_buffer[MAX_PATH_LEN];
     int res;
 
-    if (argc > 1)
+    if (argc >= 2)
+    {
         path = argv[1];
+    }
     else
+    {
         res = getcwd(cwd_buffer, MAX_PATH_LEN);
-        path = cwd_buffer;
+        if (res >= 0)
+        {
+            path = cwd_buffer;
+        }
+        else
+        {
+            path = "/"; 
+        }
+    }
 
     struct vfs_dentry entry;
+    
     for (unsigned int i = 0; readdir(path, i, &entry) == 0; i++)
+    {
         printf("%s  ", entry.name);
+    }
     printf("\n");
+    
     return 0;
 }

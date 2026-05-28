@@ -418,14 +418,75 @@ static int tokenize(char *line, char **argv, int max)
 
 static int run_cmd(int argc, char **argv)
 {
+    if (argc == 0 || argv[0] == '\0')
+    {
+        return 0;
+    }
+
+    if (strcmp(argv[0], "cd") == 0)
+    {
+        const char *target_path = (argc > 1) ? argv[1] : "/";
+        if (chdir(target_path) < 0)
+        {
+            write(1, "cd: no such file or directory\n", 30);
+            return -1;
+        }
+        return 0;
+    }
+
+    if (strcmp(argv[0], "pwd") == 0)
+    {
+        char cwd_buf[256];
+        if (getcwd(cwd_buf, sizeof(cwd_buf)) == 0)
+        {
+            int len = 0;
+            while (cwd_buf[len] != '\0') len++;
+            
+            write(1, cwd_buf, len);
+            write(1, "\n", 1);
+        }
+        else
+        {
+            write(1, "pwd: error getting current directory\n", 37);
+        }
+        return 0;
+    }
+
+    if (strcmp(argv[0], "exit") == 0)
+    {
+        syscall(SYS_exit, 0, 0, 0); 
+        return 0; 
+    }
+
+    if (strcmp(argv[0], "export") == 0)
+    {
+        if (argc < 2)
+        {
+            write(1, "export: usage: export VAR=VALUE\n", 32);
+        }
+        else
+        {
+            write(1, "export: environment variables not supported yet\n", 48);
+        }
+        return 0;
+    }
+
     char buffer[256];
+    
+    int cmd_len = 0;
+    while (argv[0][cmd_len] != '\0') cmd_len++;
+    if (cmd_len > 200) return -1;
+
     strcpy(buffer, "/system/bin/");
     strcat(buffer, argv[0]);
     strcat(buffer, ".elf");
 
     int pid = spawn(buffer, argc, argv);
     if (pid < 0)
+    {
+        write(1, "shell: command not found\n", 25);
         return -1;
+    }
 
     return waitpid(pid);
 }

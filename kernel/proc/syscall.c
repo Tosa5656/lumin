@@ -25,6 +25,87 @@
 #define SYS_EXIT     60
 #define SYS_WAITPID  61
 #define SYS_GETCWD   79
+#define SYS_CHDIR    80
+
+/* TEMP FUNCTION */
+static void normalize_path(const char *cwd, const char *input, char *output, uint64_t max_len)
+{
+    char temp[256];
+    uint64_t t_idx = 0;
+
+    if (input[0] == '/')
+    {
+        temp[t_idx++] = '/';
+        input++;
+    }
+    else
+    {
+        uint64_t i = 0;
+        while (cwd[i] != '\0' && t_idx < sizeof(temp) - 1)
+        {
+            temp[t_idx++] = cwd[i++];
+        }
+        if (temp[t_idx - 1] != '/')
+        {
+            temp[t_idx++] = '/';
+        }
+    }
+    temp[t_idx] = '\0';
+
+    uint64_t in_idx = 0;
+    while (input[in_idx] != '\0')
+    {
+        if (input[in_idx] == '/')
+        {
+            in_idx++;
+            continue;
+        }
+
+        char segment[64];
+        uint64_t s_idx = 0;
+        while (input[in_idx] != '/' && input[in_idx] != '\0' && s_idx < sizeof(segment) - 1)
+        {
+            segment[s_idx++] = input[in_idx++];
+        }
+        segment[s_idx] = '\0';
+
+        if (segment[0] == '\0' || (segment[0] == '.' && segment[1] == '\0'))
+        {
+            continue;
+        } 
+        else if (segment[0] == '.' && segment[1] == '.' && segment[2] == '\0')
+        {
+            if (t_idx > 1) {
+                t_idx--;
+                while (t_idx > 0 && temp[t_idx] != '/') {
+                    t_idx--;
+                }
+                if (t_idx == 0) t_idx = 1;
+                temp[t_idx] = '\0';
+            }
+        } 
+        else
+        {
+            if (t_idx > 1 && temp[t_idx - 1] != '/') {
+                if (t_idx < sizeof(temp) - 1) temp[t_idx++] = '/';
+            }
+            uint64_t i = 0;
+            while (segment[i] != '\0' && t_idx < sizeof(temp) - 1) {
+                temp[t_idx++] = segment[i++];
+            }
+            temp[t_idx] = '\0';
+        }
+    }
+
+    uint64_t i = 0;
+    while (temp[i] != '\0' && i < max_len - 1)
+    {
+        output[i] = temp[i];
+        i++;
+    }
+    output[i] = '\0';
+}
+
 
 uint64_t syscall_entry(struct pushaq_frame *frame)
 {
@@ -236,7 +317,32 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
             return 0;
         }
+        case SYS_CHDIR:
+        {
+            const char *user_path = (const char *)frame->rdi;
 
+            if (!current_task || current_task->pid == 0 || !user_path)
+                return -1;
+
+            char target_path[256];
+            normalize_path(current_task->cwd, user_path, target_path, sizeof(target_path));
+
+            struct vfs_dentry entry;
+            int stat_res = vfs_stat(target_path, &entry);
+            
+            if (stat_res != 0)
+                return -1;
+            
+            uint64_t i = 0;
+            while (target_path[i] != '\0' && i < sizeof(current_task->cwd) - 1)
+            {
+                current_task->cwd[i] = target_path[i];
+                i++;
+            }
+            current_task->cwd[i] = '\0';
+
+            return 0;
+        }
         default:
             serial_printf("syscall: unknown nr %llu from pid=%d\n",
                           (unsigned long long)nr, current_task ? current_task->pid : -1);

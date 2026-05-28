@@ -306,6 +306,22 @@ int task_create_user(const char *path, int argc, char **argv)
     for (int i = 0; i < MAX_FDS; i++)
         t->fds[i] = NULL;
 
+    if (current_task && current_task->pid != 0)
+    {
+        uint64_t i = 0;
+        while (current_task->cwd[i] != '\0' && i < sizeof(t->cwd) - 1)
+        {
+            t->cwd[i] = current_task->cwd[i];
+            i++;
+        }
+        t->cwd[i] = '\0';
+    }
+    else
+    {
+        t->cwd[0] = '/';
+        t->cwd[1] = '\0';
+    }
+
     task_count++;
 
     serial_printf("task_create: pid=%d entry=%p\n", t->pid, (void*)entry);

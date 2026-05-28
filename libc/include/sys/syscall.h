@@ -14,6 +14,7 @@
 #define SYS_exit    60
 #define SYS_waitpid 61
 #define SYS_getcwd  79
+#define SYS_chdir   80
 
 struct vfs_dentry;
 
@@ -80,6 +81,11 @@ static inline void reboot(void)
 static inline int getcwd(char *buf, unsigned long size)
 {
     return (int)syscall(SYS_getcwd, (long)buf, (long)size, 0);
+}
+
+static inline int chdir(const char *path)
+{
+    return (int)syscall(SYS_chdir, (long)path, 0, 0);
 }
 
 #endif
