@@ -7,6 +7,9 @@
 #define KSTACK_SIZE 0x4000
 #define KSTACK_PAGES (KSTACK_SIZE / 0x1000)
 #define USER_HEAP_START (USER_BASE_VADDR + 0x100000000ULL)
+#define MAX_FDS 16
+
+struct vfs_file;
 
 enum task_state {
     TASK_FREE    = 0,
@@ -37,6 +40,7 @@ struct task {
     void    *ustack_page;
     int exit_code;
     int parent_pid;
+    struct vfs_file *fds[MAX_FDS];
 };
 
 int  task_init(void);

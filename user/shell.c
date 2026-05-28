@@ -419,7 +419,7 @@ static int tokenize(char *line, char **argv, int max)
 static int run_cmd(int argc, char **argv)
 {
     char buffer[256];
-    strcpy(buffer, "/mnt/");
+    strcpy(buffer, "/system/bin/");
     strcat(buffer, argv[0]);
     strcat(buffer, ".elf");
 

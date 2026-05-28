@@ -32,7 +32,7 @@ static const char *timer_name(enum timer_type t)
 
 static void run_init(void)
 {
-    int pid = task_create_user("/mnt/shell.elf", 0, NULL);
+    int pid = task_create_user("/system/bin/shell.elf", 0, NULL);
     if (pid < 0)
     {
         serial_write("init: failed to create task\n");
@@ -95,8 +95,17 @@ void kmain(void)
     serial_printf("block: %d device(s) total\n", block_count());
 
     vfs_init();
-    vfs_mount_devfs("/");
-    serial_printf("vfs: devfs mounted at '/'\n");
+
+    serial_write("mounting sd1 as fat32...\n");
+    struct block_device *sd1 = block_get(1);
+    if (sd1)
+    {
+        serial_printf("  device: %s (%llu sectors)\n", sd1->name, sd1->sector_count);
+        if (vfs_mount_fat32("/", sd1) == 0)
+            serial_write("  mounted at /\n");
+        else
+            serial_write("  mount FAILED (not FAT32?)\n");
+    }
 
     vfs_mount_devfs("/dev");
     serial_printf("vfs: devfs mounted at '/dev'\n");
@@ -119,17 +128,6 @@ void kmain(void)
             continue;
         serial_printf("  %s (size=%llu, type=%d)\n",
                       de.name, (unsigned long long)de.size, de.type);
-    }
-
-    serial_write("mounting sd1 as fat32...\n");
-    struct block_device *sd1 = block_get(1);
-    if (sd1)
-    {
-        serial_printf("  device: %s (%llu sectors)\n", sd1->name, sd1->sector_count);
-        if (vfs_mount_fat32("/mnt", sd1) == 0)
-            serial_write("  mounted at /mnt\n");
-        else
-            serial_write("  mount FAILED (not FAT32?)\n");
     }
 
     task_init();

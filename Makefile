@@ -113,12 +113,23 @@ user/shell.elf: user/shell.c $(LIBC)
 	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
 	chmod -x $@
 
-fat32.img: user/init.elf user/hello.elf user/shell.elf
+CORETILS = ls cat echo clear help
+CORETIL_ELFS = $(addprefix user/coreutils/,$(addsuffix .elf,$(CORETILS)))
+
+user/coreutils/%.elf: user/coreutils/%.c $(LIBC)
+	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
+	chmod -x $@
+
+ALL_ELFS = user/init.elf user/hello.elf user/shell.elf $(CORETIL_ELFS)
+
+fat32.img: $(ALL_ELFS)
 	dd if=/dev/zero of=fat32.img bs=1M count=32
 	mkfs.fat -F 32 fat32.img
-	mcopy -i fat32.img user/init.elf ::init.elf
-	mcopy -i fat32.img user/hello.elf ::hello.elf
-	mcopy -i fat32.img user/shell.elf ::shell.elf
+	mmd -i fat32.img ::/system
+	mmd -i fat32.img ::/system/bin
+	for f in $(ALL_ELFS); do \
+		mcopy -i fat32.img $$f ::/system/bin/$$(basename $$f); \
+	done
 
 qemu: kernel fat32.img
 	qemu-system-x86_64 -drive format=raw,file=lumin.bin \

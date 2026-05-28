@@ -4,10 +4,18 @@
 #include "../mm/pmm.h"
 #include "../drivers/serial/serial.h"
 #include "../drivers/vga/vga.h"
+#include "../fs/vfs.h"
+#include "../ports.h"
 #include "keyboard.h"
 
 #define SYS_READ     0
 #define SYS_WRITE    1
+#define SYS_OPEN     2
+#define SYS_CLOSE    3
+#define SYS_READDIR  5
+#define SYS_STAT     6
+#define SYS_CLEAR    7
+#define SYS_REBOOT   8
 #define SYS_YIELD    24
 #define SYS_GETPID   39
 #define SYS_BRK      45
@@ -46,22 +54,94 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             char *buf = (char *)frame->rsi;
             uint64_t count = frame->rdx;
 
-            if (fd != 0)
+            if (fd == 0)
+            {
+                uint64_t read = 0;
+                while (read < count)
+                {
+                    while (!keyboard_avail())
+                        __asm__ volatile("sti; hlt; cli");
+
+                    int c = keyboard_dequeue();
+                    if (c < 0) continue;
+
+                    buf[read++] = (char)c;
+                }
+                return read;
+            }
+
+            if (!current_task || fd < 0 || fd >= MAX_FDS || !current_task->fds[fd])
+                return -1;
+            return vfs_read(current_task->fds[fd], count, buf);
+        }
+
+        case SYS_OPEN:
+        {
+            const char *path = (const char *)frame->rdi;
+            int flags = (int)frame->rsi;
+
+            if (!current_task || current_task->pid == 0)
                 return -1;
 
-            uint64_t read = 0;
-            while (read < count)
+            struct vfs_file *f = vfs_open(path, flags);
+            if (!f)
+                return -1;
+
+            int fd = -1;
+            for (int i = 0; i < MAX_FDS; i++)
             {
-                while (!keyboard_avail())
-                    __asm__ volatile("sti; hlt; cli");
-
-                int c = keyboard_dequeue();
-                if (c < 0) continue;
-
-                buf[read++] = (char)c;
+                if (!current_task->fds[i])
+                {
+                    fd = i;
+                    break;
+                }
             }
-            return read;
+            if (fd < 0)
+            {
+                vfs_close(f);
+                return -1;
+            }
+
+            current_task->fds[fd] = f;
+            return fd;
         }
+
+        case SYS_CLOSE:
+        {
+            int fd = (int)frame->rdi;
+            if (!current_task || fd < 0 || fd >= MAX_FDS || !current_task->fds[fd])
+                return -1;
+            vfs_close(current_task->fds[fd]);
+            current_task->fds[fd] = NULL;
+            return 0;
+        }
+
+        case SYS_READDIR:
+        {
+            const char *path = (const char *)frame->rdi;
+            uint32_t index = (uint32_t)frame->rsi;
+            struct vfs_dentry *entry = (struct vfs_dentry *)frame->rdx;
+
+            return vfs_readdir(path, index, entry);
+        }
+
+        case SYS_STAT:
+        {
+            const char *path = (const char *)frame->rdi;
+            struct vfs_dentry *entry = (struct vfs_dentry *)frame->rsi;
+
+            return vfs_stat(path, entry);
+        }
+
+        case SYS_CLEAR:
+            vga_clear(vga_default_color);
+            return 0;
+
+        case SYS_REBOOT:
+            serial_write("REBOOT\n");
+            outb(0x64, 0xFE);
+            return 0;
+
 
         case SYS_BRK:
         {

@@ -3,10 +3,18 @@
 
 #define SYS_read    0
 #define SYS_write   1
+#define SYS_open    2
+#define SYS_close   3
+#define SYS_readdir 5
+#define SYS_stat    6
+#define SYS_clear   7
+#define SYS_reboot  8
 #define SYS_brk     45
 #define SYS_spawn   59
 #define SYS_exit    60
 #define SYS_waitpid 61
+
+struct vfs_dentry;
 
 static inline long syscall(long n, long a1, long a2, long a3)
 {
@@ -37,6 +45,36 @@ static inline void *sbrk(long increment)
     if (new == -1)
         return (void *)-1;
     return (void *)old;
+}
+
+static inline int open(const char *path, int flags)
+{
+    return (int)syscall(SYS_open, (long)path, (long)flags, 0);
+}
+
+static inline int close(int fd)
+{
+    return (int)syscall(SYS_close, (long)fd, 0, 0);
+}
+
+static inline int readdir(const char *path, unsigned int index, struct vfs_dentry *entry)
+{
+    return (int)syscall(SYS_readdir, (long)path, (long)index, (long)entry);
+}
+
+static inline int stat(const char *path, struct vfs_dentry *entry)
+{
+    return (int)syscall(SYS_stat, (long)path, (long)entry, 0);
+}
+
+static inline void clear(void)
+{
+    syscall(SYS_clear, 0, 0, 0);
+}
+
+static inline void reboot(void)
+{
+    syscall(SYS_reboot, 0, 0, 0);
 }
 
 #endif

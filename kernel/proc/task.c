@@ -45,6 +45,15 @@ static void free_pid(int pid)
 
 static void free_task_resources(struct task *t)
 {
+    for (int i = 0; i < MAX_FDS; i++)
+    {
+        if (t->fds[i])
+        {
+            vfs_close(t->fds[i]);
+            t->fds[i] = NULL;
+        }
+    }
+
     if (t->ustack_page)
     {
         pmm_free(t->ustack_page);
@@ -294,6 +303,8 @@ int task_create_user(const char *path, int argc, char **argv)
     t->ustack_page  = ustack;
     t->exit_code    = 0;
     t->parent_pid   = current_task ? current_task->pid : 0;
+    for (int i = 0; i < MAX_FDS; i++)
+        t->fds[i] = NULL;
 
     task_count++;
 
@@ -479,6 +490,8 @@ int task_fork(struct pushaq_frame *frame)
     t->ustack_page = ustack;
     t->exit_code   = 0;
     t->parent_pid  = current_task->pid;
+    for (int i = 0; i < MAX_FDS; i++)
+        t->fds[i] = NULL;
 
     task_count++;
     serial_printf("fork: child pid=%d\n", child_pid);
