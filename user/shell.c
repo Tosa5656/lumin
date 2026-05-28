@@ -1,7 +1,9 @@
 #include <stdio.h>
+#include <stddef.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/syscall.h>
 
 #define LINE_MAX 256
 #define MAX_ARGS 16
@@ -416,37 +418,16 @@ static int tokenize(char *line, char **argv, int max)
 
 static int run_cmd(int argc, char **argv)
 {
-    (void)argc;
+    char buffer[256];
+    strcpy(buffer, "/mnt/");
+    strcat(buffer, argv[0]);
+    strcat(buffer, ".elf");
 
-    if (strcmp(argv[0], "help") == 0)
-    {
-        println("Lumin Shell Commands:");
-        println("  help      - this help");
-        println("  echo      - print arguments");
-        println("  exit      - exit shell");
-        return 0;
-    }
+    int pid = spawn(buffer, argc, argv);
+    if (pid < 0)
+        return -1;
 
-    if (strcmp(argv[0], "echo") == 0)
-    {
-        for (int i = 1; i < argc; i++)
-        {
-            if (i > 1) write(1, " ", 1);
-            print(argv[i]);
-        }
-        println("");
-        return 0;
-    }
-
-    if (strcmp(argv[0], "exit") == 0)
-    {
-        println("bye!");
-        exit(0);
-    }
-
-    print(argv[0]);
-    println(": command not found");
-    return -1;
+    return waitpid(pid);
 }
 
 int main(void)
@@ -459,8 +440,7 @@ int main(void)
     for (;;)
     {
         print("$ ");
-        int len = readline(line, LINE_MAX);
-        (void)len;
+        readline(line, LINE_MAX);
 
         int argc = tokenize(line, argv, MAX_ARGS);
         if (argc == 0)

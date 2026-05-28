@@ -69,6 +69,33 @@ void pmm_free(void *page)
     free_pages++;
 }
 
+void *pmm_alloc_pages(size_t n)
+{
+    if (!free_list || n == 0) return NULL;
+
+    uint64_t highest = (uint64_t)pmm_alloc();
+    if (!highest) return NULL;
+
+    for (size_t i = 1; i < n; i++)
+    {
+        void *page = pmm_alloc();
+        if (!page)
+        {
+            for (size_t j = 0; j < i; j++)
+                pmm_free((void *)(highest - j * 0x1000));
+            return NULL;
+        }
+    }
+
+    return (void *)(highest - (n - 1) * 0x1000);
+}
+
+void pmm_free_pages(void *addr, size_t n)
+{
+    for (size_t i = 0; i < n; i++)
+        pmm_free((void *)((uint64_t)addr + i * 0x1000));
+}
+
 size_t pmm_free_count(void)
 {
     return free_pages;

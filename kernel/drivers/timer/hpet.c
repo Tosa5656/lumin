@@ -103,7 +103,7 @@ int hpet_init(uint32_t hz)
 
     hpet_base[HPET_GEN_CONF / 8] = 3;
 
-    hpet_base[HPET_T0_CONF / 8] = (1 << 2) | (1 << 4);
+    hpet_base[HPET_T0_CONF / 8] = (1 << 2) | (1 << 3);
 
     uint64_t main_cnt = hpet_base[HPET_MAIN_CNT / 8];
     hpet_base[HPET_T0_COMP / 8] = main_cnt + comp;

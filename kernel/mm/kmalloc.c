@@ -50,6 +50,21 @@ void kmalloc_init(void)
     serial_write("kmalloc: 4 pages added to heap\n");
 }
 
+static void heap_coalesce(void)
+{
+    struct heap_block *cur = heap_root;
+    while (cur && cur->next)
+    {
+        if (cur->free && cur->next->free)
+        {
+            cur->size += cur->next->size;
+            cur->next = cur->next->next;
+            continue;
+        }
+        cur = cur->next;
+    }
+}
+
 void *kmalloc(uint64_t size)
 {
     if (size == 0) return NULL;
@@ -57,6 +72,8 @@ void *kmalloc(uint64_t size)
     uint64_t needed = size + sizeof(struct heap_block);
     if (needed < 16) needed = 16;
     needed = (needed + HEAP_ALIGN - 1) & ~(HEAP_ALIGN - 1);
+
+    heap_coalesce();
 
     struct heap_block *cur = heap_root;
     while (cur) {
@@ -79,6 +96,8 @@ void *kmalloc(uint64_t size)
     void *page = pmm_alloc();
     if (!page) return NULL;
     heap_add_pages(page);
+
+    heap_coalesce();
 
     cur = heap_root;
     while (cur) {

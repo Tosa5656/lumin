@@ -23,8 +23,12 @@ uint64_t *vmm_create_pml4(void)
     if (!page) return NULL;
 
     uint64_t *new_pml4 = (uint64_t *)page;
+
     for (int i = 0; i < PAGE_TABLE_ENTRIES; i++)
         new_pml4[i] = kernel_pml4[i];
+
+    for (int i = 1; i < 256; i++)
+        new_pml4[i] = 0;
 
     return new_pml4;
 }

@@ -55,7 +55,6 @@ void kmain(void)
     vga_init();
     vga_clear(color);
     vga_default_color = color;
-    vga_write("Hello World!", color);
 
     serial_init();
     serial_write("Serial initialized.\n");

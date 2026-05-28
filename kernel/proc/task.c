@@ -45,11 +45,6 @@ static void free_pid(int pid)
 
 static void free_task_resources(struct task *t)
 {
-    if (t->kstack_page)
-    {
-        pmm_free(t->kstack_page);
-        t->kstack_page = NULL;
-    }
     if (t->ustack_page)
     {
         pmm_free(t->ustack_page);
@@ -58,7 +53,7 @@ static void free_task_resources(struct task *t)
     if (t->pml4)
     {
         uint64_t *pml4 = t->pml4;
-        for (int pml4_idx = 0; pml4_idx < 256; pml4_idx++)
+        for (int pml4_idx = 1; pml4_idx < 256; pml4_idx++)
         {
             uint64_t pml4e = pml4[pml4_idx];
             if (!(pml4e & PAGE_PRESENT))
@@ -93,13 +88,19 @@ static void free_task_resources(struct task *t)
                             continue;
                         pmm_free((void *)(uintptr_t)(pte & ~0xFFFULL));
                     }
-                    pmm_free(pd);
+                    pmm_free(pt);
                 }
+                pmm_free(pd);
             }
             pmm_free(pdpt);
         }
         pmm_free(pml4);
         t->pml4 = NULL;
+    }
+    if (t->kstack_page)
+    {
+        pmm_free_pages(t->kstack_page, KSTACK_PAGES);
+        t->kstack_page = NULL;
     }
 }
 
@@ -127,6 +128,16 @@ static int find_task_idx(struct task *t)
     return -1;
 }
 
+static struct task *find_task_by_pid(int pid)
+{
+    for (int i = 0; i < MAX_TASKS; i++)
+    {
+        if (tasks[i].pid == pid && tasks[i].state != TASK_FREE)
+            return &tasks[i];
+    }
+    return NULL;
+}
+
 int task_init(void)
 {
     for (int i = 0; i < MAX_TASKS; i++)
@@ -136,7 +147,7 @@ int task_init(void)
         pid_bitmap[i] = 0;
 
     tasks[0].pid          = 0;
-    tasks[0].state        = TASK_READY;
+    tasks[0].state        = TASK_RUNNING;
     tasks[0].pml4         = NULL;
     tasks[0].kstack_page  = NULL;
     tasks[0].ustack_page  = NULL;
@@ -238,17 +249,17 @@ int task_create_user(const char *path, int argc, char **argv)
         return -1;
     }
 
-    void *kstack = pmm_alloc();
+    void *kstack = pmm_alloc_pages(KSTACK_PAGES);
     void *ustack = pmm_alloc();
     if (!kstack || !ustack)
     {
         serial_write("task_create: pmm_alloc failed\n");
-        if (kstack) pmm_free(kstack);
+        if (kstack) pmm_free_pages(kstack, KSTACK_PAGES);
         if (ustack) pmm_free(ustack);
         return -1;
     }
 
-    uint64_t kstack_top = (uint64_t)kstack + 0x1000;
+    uint64_t kstack_top = (uint64_t)kstack + KSTACK_SIZE;
     uint64_t us_vaddr   = USER_BASE_VADDR + 0x1000000000ULL;
 
     uint64_t user_rsp;
@@ -257,7 +268,7 @@ int task_create_user(const char *path, int argc, char **argv)
     if (vmm_map_page(pml4, us_vaddr - 0x1000, (uint64_t)ustack, PAGE_USER | PAGE_WRITE) != 0)
     {
         serial_write("task_create: map ustack failed\n");
-        pmm_free(kstack);
+        pmm_free_pages(kstack, KSTACK_PAGES);
         pmm_free(ustack);
         return -1;
     }
@@ -282,7 +293,7 @@ int task_create_user(const char *path, int argc, char **argv)
     t->kstack_page  = kstack;
     t->ustack_page  = ustack;
     t->exit_code    = 0;
-    t->parent_pid   = 0;
+    t->parent_pid   = current_task ? current_task->pid : 0;
 
     task_count++;
 
@@ -315,6 +326,22 @@ void task_exit(int code)
         "cli\n"
         "mov %0, %%cr3\n"
         "mov %1, %%rsp\n"
+        "pop %%r15\n"
+        "pop %%r14\n"
+        "pop %%r13\n"
+        "pop %%r12\n"
+        "pop %%r11\n"
+        "pop %%r10\n"
+        "pop %%r9\n"
+        "pop %%r8\n"
+        "pop %%rbp\n"
+        "pop %%rdi\n"
+        "pop %%rsi\n"
+        "pop %%rdx\n"
+        "pop %%rcx\n"
+        "pop %%rbx\n"
+        "pop %%rax\n"
+        "iretq\n"
         : : "r"(kernel_cr3), "r"(kernel_rsp)
         : "memory"
     );
@@ -342,16 +369,16 @@ int task_fork(struct pushaq_frame *frame)
         (void)pt;
     }
 
-    void *kstack = pmm_alloc();
+    void *kstack = pmm_alloc_pages(KSTACK_PAGES);
     void *ustack = pmm_alloc();
     if (!kstack || !ustack)
     {
-        if (kstack) pmm_free(kstack);
+        if (kstack) pmm_free_pages(kstack, KSTACK_PAGES);
         if (ustack) pmm_free(ustack);
         return -1;
     }
 
-    uint64_t kstack_top = (uint64_t)kstack + 0x1000;
+    uint64_t kstack_top = (uint64_t)kstack + KSTACK_SIZE;
     uint64_t us_vaddr   = USER_BASE_VADDR + 0x1000000000ULL;
 
     uint64_t *parent_kstack = (uint64_t *)current_task->kernel_rsp;
@@ -458,6 +485,23 @@ int task_fork(struct pushaq_frame *frame)
     return child_pid;
 }
 
+int task_waitpid_nb(int pid)
+{
+    if (!current_task) return -1;
+
+    for (int i = 0; i < MAX_TASKS; i++)
+    {
+        if (tasks[i].parent_pid == current_task->pid &&
+            (pid == -1 || tasks[i].pid == pid))
+        {
+            if (tasks[i].state == TASK_FREE)
+                return tasks[i].exit_code;
+            return -2;
+        }
+    }
+    return -1;
+}
+
 int task_getpid(void)
 {
     if (!current_task) return -1;
@@ -504,7 +548,7 @@ uint64_t schedule(uint64_t current_rsp)
             }
 
             if (current_task->kstack_page)
-                gdt_set_kstack((uint64_t)current_task->kstack_page + 0x1000);
+                gdt_set_kstack((uint64_t)current_task->kstack_page + KSTACK_SIZE);
 
             return current_task->kernel_rsp;
         }

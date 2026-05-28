@@ -6,13 +6,15 @@
 #include "../drivers/vga/vga.h"
 #include "keyboard.h"
 
-#define SYS_READ   0
-#define SYS_WRITE  1
-#define SYS_YIELD  24
-#define SYS_GETPID 39
-#define SYS_BRK    45
-#define SYS_FORK   57
-#define SYS_EXIT   60
+#define SYS_READ     0
+#define SYS_WRITE    1
+#define SYS_YIELD    24
+#define SYS_GETPID   39
+#define SYS_BRK      45
+#define SYS_FORK     57
+#define SYS_SPAWN    59
+#define SYS_EXIT     60
+#define SYS_WAITPID  61
 
 uint64_t syscall_entry(struct pushaq_frame *frame)
 {
@@ -108,6 +110,17 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
         case SYS_FORK:
             return task_fork(frame);
+
+        case SYS_SPAWN:
+        {
+            const char *path = (const char *)frame->rdi;
+            int argc = (int)frame->rsi;
+            char **argv = (char **)frame->rdx;
+            return task_create_user(path, argc, argv);
+        }
+
+        case SYS_WAITPID:
+            return task_waitpid_nb((int)frame->rdi);
 
         case SYS_EXIT:
             task_exit((int)frame->rdi);

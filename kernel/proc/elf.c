@@ -2,9 +2,10 @@
 #include "../fs/vfs.h"
 #include "../mm/pmm.h"
 #include "../mm/vmm.h"
+#include "../mm/kmalloc.h"
 #include "../drivers/serial/serial.h"
 
-#define ELF_MAX_PAGES 1024
+#define ELF_MAX_PAGES 252
 
 struct elf_page {
     uint64_t vaddr;
@@ -46,7 +47,13 @@ uint64_t elf_load(struct vfs_file *file, uint64_t *pml4)
 {
     if (!file || !pml4) return 0;
 
-    struct elf_page pages[ELF_MAX_PAGES];
+    struct elf_page *pages = kmalloc(ELF_MAX_PAGES * sizeof(struct elf_page));
+    if (!pages)
+    {
+        serial_write("elf: kmalloc failed\n");
+        return 0;
+    }
+
     int page_count = 0;
 
     struct elf64_hdr hdr;
@@ -54,30 +61,35 @@ uint64_t elf_load(struct vfs_file *file, uint64_t *pml4)
     if (vfs_read(file, sizeof(hdr), &hdr) != (int)sizeof(hdr))
     {
         serial_write("elf: failed to read header\n");
+        kfree(pages);
         return 0;
     }
 
     if (*(uint32_t *)hdr.e_ident != ELF_MAGIC)
     {
         serial_write("elf: bad magic\n");
+        kfree(pages);
         return 0;
     }
 
     if (hdr.e_ident[4] != ELF_64 || hdr.e_ident[5] != ELF_LE)
     {
         serial_write("elf: not 64-bit LE\n");
+        kfree(pages);
         return 0;
     }
 
     if (hdr.e_type != ELF_EXEC)
     {
         serial_write("elf: not executable\n");
+        kfree(pages);
         return 0;
     }
 
     if (hdr.e_phentsize != sizeof(struct elf64_phdr))
     {
         serial_write("elf: unexpected phdr size\n");
+        kfree(pages);
         return 0;
     }
 
@@ -111,6 +123,7 @@ uint64_t elf_load(struct vfs_file *file, uint64_t *pml4)
         {
             serial_write("elf: too many segments\n");
             elf_cleanup(pages, page_count, pml4);
+            kfree(pages);
             return 0;
         }
 
@@ -125,6 +138,7 @@ uint64_t elf_load(struct vfs_file *file, uint64_t *pml4)
             {
                 serial_write("elf: pmm_alloc failed\n");
                 elf_cleanup(pages, page_count, pml4);
+                kfree(pages);
                 return 0;
             }
 
@@ -154,10 +168,12 @@ uint64_t elf_load(struct vfs_file *file, uint64_t *pml4)
             {
                 serial_write("elf: vmm_map_page failed\n");
                 elf_cleanup(pages, page_count, pml4);
+                kfree(pages);
                 return 0;
             }
         }
     }
 
+    kfree(pages);
     return hdr.e_entry;
 }

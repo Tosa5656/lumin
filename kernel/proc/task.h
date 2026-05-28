@@ -4,6 +4,8 @@
 #include <stdint.h>
 
 #define MAX_TASKS 32
+#define KSTACK_SIZE 0x4000
+#define KSTACK_PAGES (KSTACK_SIZE / 0x1000)
 #define USER_HEAP_START (USER_BASE_VADDR + 0x100000000ULL)
 
 enum task_state {
@@ -42,6 +44,8 @@ int  task_create_user(const char *path, int argc, char **argv);
 void task_exit(int code);
 int  task_fork(struct pushaq_frame *frame);
 int  task_getpid(void);
+int  task_waitpid_nb(int pid);
+int  task_waitpid(int pid);
 void task_yield(void);
 uint64_t schedule(uint64_t current_rsp);
 
