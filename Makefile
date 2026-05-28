@@ -113,6 +113,14 @@ user/shell.elf: user/shell.c $(LIBC)
 	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
 	chmod -x $@
 
+user/as.elf: user/as.c $(LIBC)
+	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
+	chmod -x $@
+
+user/ecc.elf: user/ecc.c $(LIBC)
+	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
+	chmod -x $@
+
 CORETILS = ls cat echo clear help
 CORETIL_ELFS = $(addprefix user/coreutils/,$(addsuffix .elf,$(CORETILS)))
 
@@ -120,7 +128,7 @@ user/coreutils/%.elf: user/coreutils/%.c $(LIBC)
 	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
 	chmod -x $@
 
-ALL_ELFS = user/init.elf user/hello.elf user/shell.elf $(CORETIL_ELFS)
+ALL_ELFS = user/init.elf user/hello.elf user/shell.elf user/as.elf user/ecc.elf $(CORETIL_ELFS)
 
 fat32.img: $(ALL_ELFS)
 	dd if=/dev/zero of=fat32.img bs=1M count=32
