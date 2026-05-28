@@ -35,19 +35,16 @@ static void heap_add_pages(void *addr)
 
 void kmalloc_init(void)
 {
-    void *p1 = pmm_alloc();
-    void *p2 = pmm_alloc();
-    void *p3 = pmm_alloc();
-    void *p4 = pmm_alloc();
-    if (!p1 || !p2 || !p3 || !p4) {
-        serial_write("kmalloc_init: pmm_alloc failed\n");
-        return;
+    for (int i = 0; i < 64; i++)
+    {
+        void *p = pmm_alloc();
+        if (!p) {
+            serial_write("kmalloc_init: pmm_alloc failed\n");
+            return;
+        }
+        heap_add_pages(p);
     }
-    heap_add_pages(p1);
-    heap_add_pages(p2);
-    heap_add_pages(p3);
-    heap_add_pages(p4);
-    serial_write("kmalloc: 4 pages added to heap\n");
+    serial_write("kmalloc: 64 pages added to heap\n");
 }
 
 static void heap_coalesce(void)

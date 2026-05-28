@@ -24,6 +24,7 @@
 #define SYS_SPAWN    59
 #define SYS_EXIT     60
 #define SYS_WAITPID  61
+#define SYS_GETCWD   79
 
 uint64_t syscall_entry(struct pushaq_frame *frame)
 {
@@ -210,6 +211,31 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
         case SYS_EXIT:
             task_exit((int)frame->rdi);
             return 0;
+        
+        case SYS_GETCWD:
+        {
+            char *user_buf = (char *)frame->rdi;
+            uint64_t size = frame->rsi;
+
+            if (!current_task || current_task->pid == 0 || !user_buf || size == 0)
+                return -1;
+
+            uint64_t path_len = 0;
+            while (current_task->cwd[path_len] != '\0')
+            {
+                path_len++;
+            }
+
+            if (path_len >= size)
+                return -1;
+            
+            for (uint64_t i = 0; i <= path_len; i++)
+            {
+                user_buf[i] = current_task->cwd[i];
+            }
+
+            return 0;
+        }
 
         default:
             serial_printf("syscall: unknown nr %llu from pid=%d\n",

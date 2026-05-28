@@ -1,0 +1,8 @@
+menu "Kernel"
+
+source "kernel/mm/Kconfig"
+source "kernel/proc/Kconfig"
+source "kernel/fs/Kconfig"
+source "kernel/block/Kconfig"
+
+endmenu

@@ -1,0 +1,19 @@
+mainmenu "Lumin OS Configuration"
+
+menu "General setup"
+
+config SMP
+	bool "Symmetric multi-processing"
+	default n
+	help
+	  Enable SMP support for multi-core CPUs.
+
+config EXPERIMENTAL
+	bool "Enable experimental features"
+	default n
+
+endmenu
+
+source "kernel/Kconfig"
+source "kernel/drivers/Kconfig"
+source "user/Kconfig"

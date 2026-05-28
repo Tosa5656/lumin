@@ -13,6 +13,7 @@
 #define SYS_spawn   59
 #define SYS_exit    60
 #define SYS_waitpid 61
+#define SYS_getcwd  79
 
 struct vfs_dentry;
 
@@ -31,8 +32,7 @@ static inline int spawn(const char *path, int argc, char **argv)
 static inline int waitpid(int pid)
 {
     int code;
-    while ((code = (int)syscall(SYS_waitpid, (long)pid, 0, 0)) == -2)
-        ;
+    while ((code = (int)syscall(SYS_waitpid, (long)pid, 0, 0)) == -2);
     return code;
 }
 
@@ -75,6 +75,11 @@ static inline void clear(void)
 static inline void reboot(void)
 {
     syscall(SYS_reboot, 0, 0, 0);
+}
+
+static inline int getcwd(char *buf, unsigned long size)
+{
+    return (int)syscall(SYS_getcwd, (long)buf, (long)size, 0);
 }
 
 #endif

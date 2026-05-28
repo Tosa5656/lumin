@@ -5,3 +5,6 @@
 *.img
 *.elf
 *.a
+__pycache__
+.config
+.config.old

@@ -1,0 +1,9 @@
+menu "Block layer"
+
+config BLOCK
+	bool "Block device layer"
+	default y
+	help
+	  Generic block device interface with partition support.
+
+endmenu

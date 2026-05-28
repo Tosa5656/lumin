@@ -41,6 +41,7 @@ struct task {
     int exit_code;
     int parent_pid;
     struct vfs_file *fds[MAX_FDS];
+    char cwd[512];
 };
 
 int  task_init(void);

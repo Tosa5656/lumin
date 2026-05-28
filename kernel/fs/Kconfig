@@ -1,0 +1,16 @@
+menu "File systems"
+
+config VFS
+	bool "Virtual file system"
+	default y
+	help
+	  Abstract VFS layer with mount points and file operations.
+
+config FAT32
+	bool "FAT32 file system"
+	default y
+	depends on VFS && BLOCK
+	help
+	  FAT32 file system driver for block devices.
+
+endmenu

@@ -1,0 +1,23 @@
+menu "Userspace programs"
+
+comment "Programs are built as ELF-64 and placed on the FAT32 image."
+
+config SHELL
+	bool "Shell"
+	default y
+	help
+	  Interactive shell with command history and line editing.
+
+config HELLO
+	bool "Hello test"
+	default y
+	help
+	  Simple ELF test program.
+
+config COREUTILS
+	bool "Core utilities"
+	default y
+	help
+	  Build ls, cat, echo, clear, help utilities.
+
+endmenu

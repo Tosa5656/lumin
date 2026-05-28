@@ -1,0 +1,23 @@
+menu "Memory management"
+
+config PMM
+	bool "Physical memory manager"
+	default y
+	help
+	  Page-based physical memory manager using E820 memory map.
+
+config VMM
+	bool "Virtual memory manager"
+	default y
+	depends on PMM
+	help
+	  x86-64 page table management. Requires PMM.
+
+config KMALLOC
+	bool "Kernel heap allocator"
+	default y
+	depends on PMM
+	help
+	  General-purpose kernel heap allocator built on PMM.
+
+endmenu

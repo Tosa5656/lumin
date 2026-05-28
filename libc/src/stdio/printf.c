@@ -54,7 +54,8 @@ static void vcb_printf(const char *fmt, va_list ap, void (*out)(char))
             while (*fmt >= '0' && *fmt <= '9')
                 pad = pad * 10 + (*fmt++ - '0');
         }
-        if (*fmt == 'l') fmt++;
+        int is_long = 0;
+        while (*fmt == 'l') { is_long = 1; fmt++; }
 
         switch (*fmt)
         {
@@ -74,7 +75,9 @@ static void vcb_printf(const char *fmt, va_list ap, void (*out)(char))
             case 'd':
             case 'i':
             {
-                int v = va_arg(ap, int);
+                long long v;
+                if (is_long) v = va_arg(ap, long long);
+                else v = va_arg(ap, int);
                 {
                     char tmp[32];
                     int tlen = 0;
@@ -93,7 +96,9 @@ static void vcb_printf(const char *fmt, va_list ap, void (*out)(char))
             }
             case 'u':
             {
-                unsigned int v = va_arg(ap, unsigned int);
+                unsigned long long v;
+                if (is_long) v = va_arg(ap, unsigned long long);
+                else v = va_arg(ap, unsigned int);
                 char tmp[32];
                 int tlen = 0;
                 do { tmp[tlen++] = '0' + v % 10; v /= 10; } while (v);
@@ -107,7 +112,9 @@ static void vcb_printf(const char *fmt, va_list ap, void (*out)(char))
             case 'x':
             case 'X':
             {
-                unsigned int v = va_arg(ap, unsigned int);
+                unsigned long long v;
+                if (is_long) v = va_arg(ap, unsigned long long);
+                else v = va_arg(ap, unsigned int);
                 int upper = (*fmt == 'X');
                 char tmp[32];
                 int tlen = 0;

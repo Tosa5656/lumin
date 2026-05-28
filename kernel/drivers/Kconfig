@@ -1,0 +1,75 @@
+menu "Device drivers"
+
+config FB
+	bool "Framebuffer (VBE)"
+	default y
+	help
+	  VESA VBE linear framebuffer driver (1024x768x32).
+
+config VGA
+	bool "VGA text mode"
+	default y
+	help
+	  Standard VGA text-mode console (80x25, 0xB8000).
+
+config SERIAL
+	bool "Serial port"
+	default y
+	help
+	  COM1 serial port driver for debugging output.
+
+config KEYBOARD
+	bool "PS/2 keyboard"
+	default y
+	help
+	  PS/2 keyboard driver with scancode translation.
+
+config PCI
+	bool "PCI bus"
+	default y
+	help
+	  PCI configuration space scanner.
+
+config ATA
+	bool "ATA/PATA"
+	default y
+	depends on PCI
+	help
+	  Parallel ATA disk driver.
+
+config ACPI
+	bool "ACPI"
+	default y
+	help
+	  ACPI table parsing (RSDP, RSDT, MADT, etc.).
+
+config RTC
+	bool "Real-time clock"
+	default y
+	help
+	  CMOS RTC driver for date/time.
+
+choice
+	prompt "Timer driver"
+	default TIMER_HPET
+
+config TIMER_HPET
+	bool "HPET"
+	depends on ACPI
+	help
+	  High Precision Event Timer.
+
+config TIMER_PIT
+	bool "PIT (8254)"
+	help
+	  Legacy Programmable Interval Timer.
+
+config TIMER_LAPIC
+	bool "LAPIC timer"
+	depends on SMP
+	help
+	  Local APIC timer.
+
+endchoice
+
+endmenu

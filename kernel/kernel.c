@@ -33,14 +33,15 @@ static const char *timer_name(enum timer_type t)
 
 static void run_init(void)
 {
+    serial_write("init: starting shell.elf...\n");
     int pid = task_create_user("/system/bin/shell.elf", 0, NULL);
     if (pid < 0)
     {
-        serial_write("init: failed to create task\n");
+        serial_write("init: failed to create shell task\n");
         return;
     }
 
-    serial_write("init: task created, switching to userspace...\n");
+    serial_write("init: tasks created, switching to userspace...\n");
 
     __asm__("sti");
 
@@ -66,6 +67,21 @@ void kmain(void)
 
     idt_init();
     serial_write("IDT initialized (exceptions + IRQs).\n");
+
+    /* Enable FPU + SSE */
+    uint64_t cr4;
+    __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
+    cr4 |= (1 << 9) | (1 << 10); /* OSFXSR | OSXMMEXCPT */
+    cr4 &= ~(1 << 2);            /* clear EM (FPU emulation) */
+    cr4 |= (1 << 1);             /* set MP (monitor FPU) */
+    __asm__ volatile("mov %0, %%cr4" : : "r"(cr4));
+
+    /* Initialize x87 FPU */
+    __asm__ volatile("fwait; fninit");
+    /* Initialize SSE MXCSR to default (masked, round-to-nearest) */
+    uint32_t mxcsr = 0x1F80;
+    __asm__ volatile("ldmxcsr %0" : : "m"(mxcsr));
+    serial_write("FPU/SSE: enabled\n");
 
     pmm_init();
     int free_pages = pmm_free_count();

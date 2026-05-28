@@ -1,0 +1,23 @@
+menu "Process management"
+
+config TASKS
+	bool "Multitasking"
+	default y
+	help
+	  Preemptive scheduler, context switching, process lifecycle.
+
+config ELF
+	bool "ELF loader"
+	default y
+	depends on TASKS
+	help
+	  Load ELF-64 executables into userspace.
+
+config SYSCALL
+	bool "Syscall interface"
+	default y
+	depends on TASKS
+	help
+	  Syscall handler for userspace programs (int $0x30).
+
+endmenu
