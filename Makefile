@@ -115,12 +115,22 @@ user/shell.elf: user/shell.c $(LIBC)
 	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
 	chmod -x $@
 
-fat32.img: user/init.elf user/hello.elf user/shell.elf
+user/as.elf: user/as.c $(LIBC)
+	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
+	chmod -x $@
+
+user/ecc.elf: user/ecc.c $(LIBC)
+	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
+	chmod -x $@
+
+fat32.img: user/init.elf user/hello.elf user/shell.elf user/as.elf user/ecc.elf
 	dd if=/dev/zero of=fat32.img bs=1M count=32
 	mkfs.fat -F 32 fat32.img
 	mcopy -i fat32.img user/init.elf ::init.elf
 	mcopy -i fat32.img user/hello.elf ::hello.elf
 	mcopy -i fat32.img user/shell.elf ::shell.elf
+	mcopy -i fat32.img user/as.elf ::as.elf
+	mcopy -i fat32.img user/ecc.elf ::ecc.elf
 
 qemu: kernel fat32.img
 	qemu-system-x86_64 -drive format=raw,file=lumin.bin \
