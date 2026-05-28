@@ -308,7 +308,7 @@ int task_create_user(const char *path, int argc, char **argv)
 
     task_count++;
 
-    serial_printf("task_create: pid=%d entry=0x%p\n", t->pid, (void*)entry);
+    serial_printf("task_create: pid=%d entry=%p\n", t->pid, (void*)entry);
     return t->pid;
 }
 

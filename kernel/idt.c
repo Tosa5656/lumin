@@ -78,7 +78,7 @@ void exception_handler(int vec, struct exception_frame *frame)
 
     const char *name = (vec >= 0 && vec < 20) ? exc_names[vec] : "???";
     serial_printf("\n=== EXCEPTION %s (%d) ===\n", name, vec);
-    serial_printf("RIP: 0x%p  CS: 0x%x  RFLAGS: 0x%x\n",
+    serial_printf("RIP: %p  CS: 0x%x  RFLAGS: 0x%x\n",
                   (void*)frame->rip, (unsigned int)frame->cs, (unsigned int)frame->rflags);
     serial_printf("Error code: 0x%x\n", (unsigned int)frame->error_code);
 
@@ -86,22 +86,22 @@ void exception_handler(int vec, struct exception_frame *frame)
     {
         uint64_t cr2;
         __asm__("mov %%cr2, %0" : "=r"(cr2));
-        serial_printf("CR2 (fault address): 0x%p\n", (void*)cr2);
+        serial_printf("CR2 (fault address): %p\n", (void*)cr2);
     }
 
-    serial_printf("RBP: 0x%p\n", (void*)frame->rbp);
+    serial_printf("RBP: %p\n", (void*)frame->rbp);
     serial_printf("Stack trace:\n");
     uint64_t rbp = frame->rbp;
     for (int i = 0; i < 16 && rbp; i++)
     {
         uint64_t *fp = (uint64_t*)rbp;
         uint64_t ret = fp[1];
-        serial_printf("  #%d 0x%p\n", i, (void*)ret);
+        serial_printf("  #%d %p\n", i, (void*)ret);
         rbp = fp[0];
     }
 
     char msg[64];
-    ksnprintf(msg, sizeof(msg), "RIP: 0x%p  Error: 0x%x", (void*)frame->rip, (unsigned int)frame->error_code);
+    ksnprintf(msg, sizeof(msg), "RIP: %p  Error: 0x%x", (void*)frame->rip, (unsigned int)frame->error_code);
 
     panic(name, msg);
 }

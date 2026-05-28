@@ -15,7 +15,7 @@ struct e820_entry {
     uint32_t type;
 } __attribute__((packed));
 
-#define E820_COUNT_ADDR ((uint16_t *)0x5FFC)
+#define E820_COUNT_ADDR ((uint16_t *)0x0FFC)
 #define E820_ENTRIES    ((struct e820_entry *)0x6000)
 
 #endif

@@ -93,7 +93,7 @@ uint64_t elf_load(struct vfs_file *file, uint64_t *pml4)
         return 0;
     }
 
-    serial_printf("elf: entry=0x%p phnum=%d phoff=0x%p\n",
+    serial_printf("elf: entry=%p phnum=%d phoff=%p\n",
                   (void*)hdr.e_entry, hdr.e_phnum, (void*)hdr.e_phoff);
 
     for (uint16_t i = 0; i < hdr.e_phnum; i++)
@@ -110,7 +110,7 @@ uint64_t elf_load(struct vfs_file *file, uint64_t *pml4)
         if (phdr.p_type != PT_LOAD)
             continue;
 
-        serial_printf("elf: LOAD vaddr=0x%p filesz=0x%p memsz=0x%p offset=0x%p\n",
+        serial_printf("elf: LOAD vaddr=%p filesz=%p memsz=%p offset=%p\n",
                       (void*)phdr.p_vaddr, (void*)phdr.p_filesz,
                       (void*)phdr.p_memsz, (void*)phdr.p_offset);
 

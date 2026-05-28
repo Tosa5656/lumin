@@ -7,6 +7,7 @@ CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zo
 LDFLAGS = -m64 -nostdlib -Wl,-T,kernel/kernel.ld,--oformat,binary
 TRUNCATE = truncate
 CAT = cat
+STAGE2_SIZE = 4096
 
 clean:
 	rm -rf bin obj kernel.bin
@@ -15,7 +16,10 @@ clean:
 mkdirs:
 	mkdir -p bin obj
 
-bootloader: mkdirs
+bin/stage2.bin: arch/x86_64/stage2.asm
+	${AS} -f bin $< -o $@
+
+bootloader: mkdirs bin/stage2.bin
 	${AS} -f bin arch/x86_64/bootloader.asm -o bin/bootloader.bin
 
 HDRS = kernel os
@@ -70,6 +74,9 @@ obj/lapic.o: kernel/drivers/timer/lapic.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/pci.o: kernel/drivers/pci/pci.c
 	${CC} ${CFLAGS} -c $< -o $@
+obj/fb.o: kernel/drivers/fb/fb.c kernel/drivers/fb/fb.h kernel/drivers/fb/fb_font.h
+	${CC} ${CFLAGS} -c $< -o $@
+
 obj/ata.o: kernel/drivers/ata/ata.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/block.o: kernel/block/block.c
@@ -84,12 +91,14 @@ OBJS = obj/kernel_entry.o obj/interrupts.o obj/kernel.o obj/kprintf.o \
        obj/vmm.o obj/elf.o obj/task.o obj/syscall.o \
        obj/keyboard.o obj/vga.o obj/serial.o obj/rtc.o \
        obj/timer.o obj/pit.o obj/hpet.o obj/lapic.o \
-       obj/pci.o obj/ata.o obj/block.o obj/vfs.o obj/fat32.o
+       obj/pci.o obj/ata.o obj/block.o obj/vfs.o obj/fat32.o \
+       obj/fb.o
 
-kernel: mkdirs bootloader $(OBJS)
+kernel: mkdirs bootloader bin/stage2.bin $(OBJS)
 	${LD} ${LDFLAGS} $(OBJS) -o bin/kernel.bin
-	${TRUNCATE} -s 102400 bin/kernel.bin
-	${CAT} bin/bootloader.bin bin/kernel.bin > lumin.bin
+	${TRUNCATE} -s $$((102400 - $(STAGE2_SIZE))) bin/kernel.bin
+	${TRUNCATE} -s $(STAGE2_SIZE) bin/stage2.bin
+	${CAT} bin/bootloader.bin bin/stage2.bin bin/kernel.bin > lumin.bin
 
 USER_CC = x86_64-pc-linux-gnu-gcc
 USER_CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zone -mcmodel=large -I libc/include
