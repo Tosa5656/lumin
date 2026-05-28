@@ -4,6 +4,7 @@
 #include "../mm/pmm.h"
 #include "../drivers/serial/serial.h"
 #include "../drivers/vga/vga.h"
+#include "../drivers/fb/fb.h"
 #include "../fs/vfs.h"
 #include "../ports.h"
 #include "keyboard.h"
@@ -42,6 +43,8 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
                 {
                     serial_putchar(buf[i]);
                     vga_putchar(buf[i], vga_default_color);
+                    if (fb_available)
+                        fb_putchar(buf[i]);
                 }
             }
 
@@ -135,6 +138,8 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
         case SYS_CLEAR:
             vga_clear(vga_default_color);
+            if (fb_available)
+                fb_clear(fb_rgb(0, 0, 0));
             return 0;
 
         case SYS_REBOOT:

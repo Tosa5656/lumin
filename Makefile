@@ -110,10 +110,6 @@ LIBC_CRT0 = libc/obj/crt0.o
 libc/libc.a:
 	$(MAKE) -C libc
 
-user/init.elf: user/init.c $(LIBC)
-	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
-	chmod -x $@
-
 user/hello.elf: user/hello.c $(LIBC)
 	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
 	chmod -x $@
@@ -137,7 +133,7 @@ user/coreutils/%.elf: user/coreutils/%.c $(LIBC)
 	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
 	chmod -x $@
 
-ALL_ELFS = user/init.elf user/hello.elf user/shell.elf user/as.elf user/ecc.elf $(CORETIL_ELFS)
+ALL_ELFS = user/hello.elf user/shell.elf user/as.elf user/ecc.elf $(CORETIL_ELFS)
 
 fat32.img: $(ALL_ELFS)
 	dd if=/dev/zero of=fat32.img bs=1M count=32
