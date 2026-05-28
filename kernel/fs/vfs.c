@@ -42,7 +42,7 @@ static int path_match(const char *a, const char *b)
 
 static int resolve_full(const char *path, struct vfs_inode **out_inode)
 {
-    if (!path || *path != '/' || !out_inode)
+    if (!path || *path == '\0' || !out_inode)
         return -1;
     if (mount_count == 0)
         return -1;
@@ -56,6 +56,11 @@ static int resolve_full(const char *path, struct vfs_inode **out_inode)
     int fp_len = 0;
 
     int i = 0;
+
+    if (path[0] != '/')
+    {
+        fullpath[fp_len++] = '/';
+    }
 
     while (path[i] != '\0')
     {
