@@ -15,7 +15,7 @@
 #include "fs/vfs.h"
 #include "fs/fat32.h"
 #include "keyboard.h"
-#include "shell.h"
+
 
 unsigned char keyboard_color;
 
@@ -32,7 +32,7 @@ static const char *timer_name(enum timer_type t)
 
 static void run_init(void)
 {
-    int pid = task_create_user("/mnt/shell.elf");
+    int pid = task_create_user("/mnt/shell.elf", 0, NULL);
     if (pid < 0)
     {
         serial_write("init: failed to create task\n");
@@ -143,5 +143,4 @@ void kmain(void)
     keyboard_init();
 
     serial_write("shell: starting...\n");
-    shell_run();
 }

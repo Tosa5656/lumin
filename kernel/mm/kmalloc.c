@@ -119,4 +119,42 @@ void kfree(void *ptr)
         }
         cur = cur->next;
     }
+
+    cur = heap_root;
+    while (cur) {
+        if (cur->free && cur->size == 0x1000 && !cur->next)
+        {
+            if (cur == heap_root)
+                heap_root = NULL;
+            else
+            {
+                struct heap_block *prev = heap_root;
+                while (prev && prev->next != cur)
+                    prev = prev->next;
+                if (prev)
+                    prev->next = NULL;
+            }
+            pmm_free(cur);
+            return;
+        }
+
+        if (cur->free && cur->size == 0x1000 && cur->next && cur->next->free)
+        {
+            cur->size += cur->next->size;
+            cur->next = cur->next->next;
+        }
+
+        if (cur->free && cur->size >= 0x2000 && (!cur->next || !cur->next->free))
+        {
+            uint64_t extra = (cur->size - 0x1000) & ~0xFFFULL;
+            if (extra >= 0x1000)
+            {
+                cur->size -= extra;
+                struct heap_block *freed = (struct heap_block *)((uint8_t *)cur + cur->size);
+                pmm_free(freed);
+            }
+        }
+
+        cur = cur->next;
+    }
 }

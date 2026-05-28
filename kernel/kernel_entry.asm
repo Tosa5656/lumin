@@ -15,6 +15,7 @@ _start:
     xor al, al
     rep stosb
 
+    xor rbp, rbp
     call kmain
 .hang:
     cli

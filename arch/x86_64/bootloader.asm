@@ -152,7 +152,6 @@ dap2:
     dw 0x0800
     dd 128
     dd 0
-
 disk_error:
     mov ah, 0x0E
     mov al, 'E'

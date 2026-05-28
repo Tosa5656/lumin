@@ -11,15 +11,108 @@ static struct task tasks[MAX_TASKS];
 static int next_pid = 1;
 static int task_count = 0;
 static int current_idx = 0;
+static unsigned int pid_bitmap[(MAX_TASKS + 31) / 32];
 
 struct task *current_task = NULL;
+
+static int alloc_pid(void)
+{
+    for (int attempt = 0; attempt < MAX_TASKS * 2; attempt++)
+    {
+        if (next_pid >= 1000000)
+            next_pid = 1;
+        int pid = next_pid++;
+        int idx = pid / 32;
+        int bit = pid % 32;
+        if (idx >= (int)(sizeof(pid_bitmap)/sizeof(pid_bitmap[0])))
+            continue;
+        if (!(pid_bitmap[idx] & (1U << bit)))
+        {
+            pid_bitmap[idx] |= (1U << bit);
+            return pid;
+        }
+    }
+    return -1;
+}
+
+static void free_pid(int pid)
+{
+    int idx = pid / 32;
+    int bit = pid % 32;
+    if (idx < (int)(sizeof(pid_bitmap)/sizeof(pid_bitmap[0])))
+        pid_bitmap[idx] &= ~(1U << bit);
+}
+
+static void free_task_resources(struct task *t)
+{
+    if (t->kstack_page)
+    {
+        pmm_free(t->kstack_page);
+        t->kstack_page = NULL;
+    }
+    if (t->ustack_page)
+    {
+        pmm_free(t->ustack_page);
+        t->ustack_page = NULL;
+    }
+    if (t->pml4)
+    {
+        uint64_t *pml4 = t->pml4;
+        for (int pml4_idx = 0; pml4_idx < 256; pml4_idx++)
+        {
+            uint64_t pml4e = pml4[pml4_idx];
+            if (!(pml4e & PAGE_PRESENT))
+                continue;
+            uint64_t *pdpt = (uint64_t *)(uintptr_t)(pml4e & ~0xFFFULL);
+            for (int pdpt_idx = 0; pdpt_idx < 512; pdpt_idx++)
+            {
+                uint64_t pdpte = pdpt[pdpt_idx];
+                if (!(pdpte & PAGE_PRESENT))
+                    continue;
+                if (pdpte & PAGE_HUGE)
+                {
+                    pmm_free((void *)(uintptr_t)(pdpte & ~0xFFFULL));
+                    continue;
+                }
+                uint64_t *pd = (uint64_t *)(uintptr_t)(pdpte & ~0xFFFULL);
+                for (int pd_idx = 0; pd_idx < 512; pd_idx++)
+                {
+                    uint64_t pde = pd[pd_idx];
+                    if (!(pde & PAGE_PRESENT))
+                        continue;
+                    if (pde & PAGE_HUGE)
+                    {
+                        pmm_free((void *)(uintptr_t)(pde & ~0xFFFULL));
+                        continue;
+                    }
+                    uint64_t *pt = (uint64_t *)(uintptr_t)(pde & ~0xFFFULL);
+                    for (int pt_idx = 0; pt_idx < 512; pt_idx++)
+                    {
+                        uint64_t pte = pt[pt_idx];
+                        if (!(pte & PAGE_PRESENT))
+                            continue;
+                        pmm_free((void *)(uintptr_t)(pte & ~0xFFFULL));
+                    }
+                    pmm_free(pd);
+                }
+            }
+            pmm_free(pdpt);
+        }
+        pmm_free(pml4);
+        t->pml4 = NULL;
+    }
+}
 
 static struct task *alloc_task(void)
 {
     for (int i = 0; i < MAX_TASKS; i++)
     {
         if (tasks[i].state == TASK_FREE)
+        {
+            if (tasks[i].kstack_page || tasks[i].ustack_page || tasks[i].pml4)
+                free_task_resources(&tasks[i]);
             return &tasks[i];
+        }
     }
     return NULL;
 }
@@ -39,6 +132,9 @@ int task_init(void)
     for (int i = 0; i < MAX_TASKS; i++)
         tasks[i].state = TASK_FREE;
 
+    for (int i = 0; i < (int)(sizeof(pid_bitmap)/sizeof(pid_bitmap[0])); i++)
+        pid_bitmap[i] = 0;
+
     tasks[0].pid          = 0;
     tasks[0].state        = TASK_READY;
     tasks[0].pml4         = NULL;
@@ -54,12 +150,59 @@ int task_init(void)
     current_idx  = 0;
     task_count   = 1;
     next_pid     = 1;
+    pid_bitmap[0] = 1;
 
     serial_write("scheduler: initialized (task 0 = kernel)\n");
     return 0;
 }
 
-int task_create_user(const char *path)
+static uint64_t str_len(const char *s)
+{
+    uint64_t n = 0;
+    while (s && s[n]) n++;
+    return n;
+}
+
+static void str_cpy(char *dst, const char *src)
+{
+    while (*src)
+        *dst++ = *src++;
+    *dst = '\0';
+}
+
+static void setup_user_stack(char *phys_stack, uint64_t us_vaddr, int argc, char **argv, uint64_t *out_rsp)
+{
+    uint64_t off = 0x1000;
+
+    uint64_t arg_string_offsets[64];
+    if (argc > 64) argc = 64;
+
+    for (int i = argc - 1; i >= 0; i--)
+    {
+        const char *s = argv && argv[i] ? argv[i] : "";
+        uint64_t len = str_len(s) + 1;
+        off -= len;
+        str_cpy(phys_stack + off, s);
+        arg_string_offsets[i] = us_vaddr - 0x1000 + off;
+    }
+
+    off -= 8;
+    *(uint64_t *)(phys_stack + off) = 0;
+
+    for (int i = argc - 1; i >= 0; i--)
+    {
+        off -= 8;
+        *(uint64_t *)(phys_stack + off) = arg_string_offsets[i];
+    }
+    uint64_t argv_ptr = us_vaddr - 0x1000 + off;
+
+    off -= 8;
+    *(uint64_t *)(phys_stack + off) = (uint64_t)(uintptr_t)argc;
+
+    *out_rsp = us_vaddr - 0x1000 + off;
+}
+
+int task_create_user(const char *path, int argc, char **argv)
 {
     if (!path)
         return -1;
@@ -108,6 +251,9 @@ int task_create_user(const char *path)
     uint64_t kstack_top = (uint64_t)kstack + 0x1000;
     uint64_t us_vaddr   = USER_BASE_VADDR + 0x1000000000ULL;
 
+    uint64_t user_rsp;
+    setup_user_stack((char *)ustack, us_vaddr, argc, argv, &user_rsp);
+
     if (vmm_map_page(pml4, us_vaddr - 0x1000, (uint64_t)ustack, PAGE_USER | PAGE_WRITE) != 0)
     {
         serial_write("task_create: map ustack failed\n");
@@ -120,14 +266,14 @@ int task_create_user(const char *path)
     sp[0] = entry;
     sp[1] = GDT_UCODE | 3;
     sp[2] = 0x202;
-    sp[3] = us_vaddr;
+    sp[3] = user_rsp;
     sp[4] = GDT_UDATA | 3;
 
     sp -= 15;
     for (int i = 0; i < 15; i++)
         sp[i] = 0;
 
-    t->pid          = next_pid++;
+    t->pid          = alloc_pid();
     t->state        = TASK_READY;
     t->kernel_rsp   = (uint64_t)sp;
     t->kernel_cr3   = tasks[0].kernel_cr3;
@@ -154,16 +300,9 @@ void task_exit(int code)
     }
 
     serial_printf("task_exit: pid=%d code=%d\n", current_task->pid, code);
-    current_task->state = TASK_ZOMBIE;
+    free_pid(current_task->pid);
+    current_task->state = TASK_FREE;
     current_task->exit_code = code;
-
-    if (current_task->kstack_page)
-        pmm_free(current_task->kstack_page);
-    if (current_task->ustack_page)
-        pmm_free(current_task->ustack_page);
-
-    current_task->kstack_page = NULL;
-    current_task->ustack_page = NULL;
 
     uint64_t kernel_cr3 = tasks[0].kernel_cr3;
     uint64_t kernel_rsp = tasks[0].kernel_rsp;
@@ -302,7 +441,7 @@ int task_fork(struct pushaq_frame *frame)
 
     vmm_map_page(pml4, us_vaddr - 0x1000, (uint64_t)ustack, PAGE_USER | PAGE_WRITE);
 
-    int child_pid = next_pid++;
+    int child_pid = alloc_pid();
     t->pid         = child_pid;
     t->state       = TASK_READY;
     t->kernel_rsp  = (uint64_t)sp;

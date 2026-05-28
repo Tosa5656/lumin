@@ -51,6 +51,19 @@ void vga_clear(unsigned char color)
 void vga_putchar(char c, unsigned char color)
 {
     volatile unsigned short* buf = vga_buffer();
+    if (c == '\r')
+    {
+        vga_col = 0;
+        vga_sync_cursor();
+        return;
+    }
+    if (c == '\b')
+    {
+        if (vga_col > 0)
+            vga_col--;
+        vga_sync_cursor();
+        return;
+    }
     if (c == '\n')
     {
         vga_col = 0;

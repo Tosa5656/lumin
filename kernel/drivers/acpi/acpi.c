@@ -2,31 +2,16 @@
 #include "acpi_common.h"
 #include "ports.h"
 #include "mm/pmm.h"
+#include "drivers/mmio.h"
 #include <stdint.h>
 #include <stddef.h>
 
+#define MAPPED_LIMIT 0x200000
+
 static volatile uint64_t *ensure_mapped(uint64_t phys)
 {
-    if (phys >= 0x200000)
-    {
-        uint64_t aligned = phys & ~0x1FFFFFULL;
-        uint64_t entry   = aligned | 0x83;
-        volatile uint64_t *pdp = (volatile uint64_t *)0x2000;
-        volatile uint64_t *pml4 = (volatile uint64_t *)0x1000;
-        int pdp_idx = (int)((aligned >> 30) & 0x1FF);
-        int pd_idx  = (int)((aligned >> 21) & 0x1FF);
-        if (!(pdp[pdp_idx] & 1))
-        {
-            uint64_t pd_page = (uint64_t)pmm_alloc();
-            volatile uint64_t *pd = (volatile uint64_t *)pd_page;
-            for (int i = 0; i < 512; i++)
-                pd[i] = 0;
-            pdp[pdp_idx] = pd_page | 3;
-        }
-        volatile uint64_t *pd2 = (volatile uint64_t *)(pdp[pdp_idx] & ~0xFFFULL);
-        pd2[pd_idx] = entry;
-        __asm__ volatile("invlpg (%0)" : : "r"(phys) : "memory");
-    }
+    if (phys >= MAPPED_LIMIT)
+        mmio_map_2mb(phys);
     return (volatile uint64_t *)(uint64_t)phys;
 }
 

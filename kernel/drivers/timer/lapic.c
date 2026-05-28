@@ -13,7 +13,7 @@
 #define LAPIC_TIMER_CURR   0x390
 #define LAPIC_EOI          0xB0
 
-#define TIMER_VECTOR 48
+#define TIMER_VECTOR 34
 
 static volatile uint32_t *lapic_base;
 static volatile uint64_t ticks;

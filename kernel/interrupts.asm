@@ -108,6 +108,16 @@ isr33_handler:
 
 extern syscall_entry
 
+global isr34_handler
+isr34_handler:
+    pushaq
+    mov rdi, 34
+    mov rsi, rsp
+    call irq_handler
+    mov rsp, rax
+    popaq
+    iretq
+
 global isr48_handler
 isr48_handler:
     pushaq
