@@ -2,8 +2,31 @@
 #include "ports.h"
 #include "drivers/vga/vga.h"
 #include "drivers/serial/serial.h"
+#include "fs/vfs.h"
+#include "include/initcall.h"
 
 extern unsigned char keyboard_color;
+
+static int keyboard_chr_read(struct vfs_inode *inode, uint64_t offset, uint64_t count, void *buf)
+{
+    (void)inode; (void)offset;
+    unsigned char *cbuf = (unsigned char *)buf;
+    uint64_t read = 0;
+    while (read < count)
+    {
+        while (!keyboard_avail())
+            __asm__ volatile("sti; hlt; cli");
+        int c = keyboard_dequeue();
+        if (c < 0) continue;
+        cbuf[read++] = (unsigned char)c;
+    }
+    return (int)read;
+}
+
+static struct vfs_inode_ops keyboard_chr_ops = {
+    .read  = keyboard_chr_read,
+    .write = NULL,
+};
 
 static int shift_pressed;
 static int ctrl_pressed;
@@ -48,6 +71,13 @@ static const char keymap_shift[128] = {
     [0x30] = 'B',  [0x31] = 'N',  [0x32] = 'M',  [0x33] = '<',
     [0x34] = '>',  [0x35] = '?',
 };
+
+static int keyboard_chr_init(void)
+{
+    devfs_register_chrdev("keyboard", &keyboard_chr_ops, NULL);
+    return 0;
+}
+pure_initcall(keyboard_chr_init);
 
 void keyboard_init(void)
 {

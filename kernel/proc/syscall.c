@@ -6,6 +6,7 @@
 #include "../drivers/vga/vga.h"
 #include "../drivers/fb/fb.h"
 #include "../fs/vfs.h"
+#include "../fs/pipefs.h"
 #include "../ports.h"
 #include "keyboard.h"
 
@@ -13,10 +14,16 @@
 #define SYS_WRITE    1
 #define SYS_OPEN     2
 #define SYS_CLOSE    3
+#define SYS_PIPE     4
 #define SYS_READDIR  5
 #define SYS_STAT     6
 #define SYS_CLEAR    7
 #define SYS_REBOOT   8
+#define SYS_DUP      9
+#define SYS_DUP2     10
+#define SYS_KILL     11
+#define SYS_SIGACTION 12
+#define SYS_SIGRETURN 13
 #define SYS_YIELD    24
 #define SYS_GETPID   39
 #define SYS_BRK      45
@@ -404,6 +411,95 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             result = 0;
             break;
         }
+        case SYS_PIPE:
+        {
+            int *pipefd = (int *)frame->rdi;
+            int fds[2];
+            if (vfs_pipe_create(&fds[0], &fds[1]) != 0)
+            {
+                result = -1;
+                break;
+            }
+            pipefd[0] = fds[0];
+            pipefd[1] = fds[1];
+            result = 0;
+            break;
+        }
+
+        case SYS_DUP:
+        {
+            int oldfd = (int)frame->rdi;
+            if (!current_task || oldfd < 0 || oldfd >= MAX_FDS || !current_task->fds[oldfd])
+            {
+                result = -1;
+                break;
+            }
+            int newfd = -1;
+            for (int i = 0; i < MAX_FDS; i++)
+            {
+                if (!current_task->fds[i])
+                {
+                    newfd = i;
+                    break;
+                }
+            }
+            if (newfd < 0)
+            {
+                result = -1;
+                break;
+            }
+            current_task->fds[newfd] = vfs_dup(current_task->fds[oldfd]);
+            result = newfd;
+            break;
+        }
+
+        case SYS_DUP2:
+        {
+            int oldfd = (int)frame->rdi;
+            int newfd = (int)frame->rsi;
+            if (!current_task || oldfd < 0 || oldfd >= MAX_FDS || newfd < 0 || newfd >= MAX_FDS)
+            {
+                result = -1;
+                break;
+            }
+            if (!current_task->fds[oldfd])
+            {
+                result = -1;
+                break;
+            }
+            if (current_task->fds[newfd])
+            {
+                vfs_close(current_task->fds[newfd]);
+                current_task->fds[newfd] = NULL;
+            }
+            current_task->fds[newfd] = vfs_dup(current_task->fds[oldfd]);
+            result = newfd;
+            break;
+        }
+
+        case SYS_KILL:
+        {
+            int pid = (int)frame->rdi;
+            int sig = (int)frame->rsi;
+            result = task_kill(pid, sig);
+            break;
+        }
+
+        case SYS_SIGACTION:
+        {
+            int sig = (int)frame->rdi;
+            const struct sigaction *act = (const struct sigaction *)frame->rsi;
+            struct sigaction *oldact = (struct sigaction *)frame->rdx;
+            result = task_sigaction(sig, act, oldact);
+            break;
+        }
+
+        case SYS_SIGRETURN:
+        {
+            result = 0;
+            break;
+        }
+
         default:
             serial_printf("syscall: unknown nr %llu from pid=%d\n",
                           (unsigned long long)nr, current_task ? current_task->pid : -1);
@@ -412,5 +508,6 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
     }
 
     frame->rax = result;
+    task_check_signals();
     return (uint64_t)frame;
 }

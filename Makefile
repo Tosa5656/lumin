@@ -82,6 +82,14 @@ obj/syscall.o: kernel/proc/syscall.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/keyboard.o: os/keyboard.c
 	${CC} ${CFLAGS} -c $< -o $@
+obj/initcall.o: kernel/include/initcall.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/smp.o: kernel/smp/smp.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/pipefs.o: kernel/fs/pipefs.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/device.o: kernel/drivers/device.c
+	${CC} ${CFLAGS} -c $< -o $@
 obj/vga.o: kernel/drivers/vga/vga.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/serial.o: kernel/drivers/serial/serial.c
@@ -194,7 +202,8 @@ OBJS = $(CORE_OBJS) \
        $(OBJS_KEYBOARD) $(OBJS_VGA) $(OBJS_SERIAL) $(OBJS_RTC) \
        $(OBJS_TIMER) obj/pit.o obj/hpet.o obj/lapic.o \
        $(OBJS_PCI) $(OBJS_FB) $(OBJS_ATA) \
-       $(OBJS_BLOCK) $(OBJS_VFS) $(OBJS_FAT32)
+       $(OBJS_BLOCK) $(OBJS_VFS) $(OBJS_FAT32) \
+       obj/initcall.o obj/smp.o obj/pipefs.o obj/device.o
 
 kernel: mkdirs bootloader bin/stage2.bin $(OBJS) $(AUTOCONF)
 	${LD} ${LDFLAGS} $(OBJS) -o bin/kernel.bin

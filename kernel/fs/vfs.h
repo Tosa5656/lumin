@@ -13,6 +13,7 @@ enum vfs_inode_type {
     VFS_FILE,
     VFS_DIR,
     VFS_BLKDEV,
+    VFS_CHRDEV,
 };
 
 struct vfs_inode;
@@ -90,5 +91,10 @@ int  vfs_mkdir(const char *path);
 
 void vfs_inode_ref(struct vfs_inode *inode);
 void vfs_inode_unref(struct vfs_inode *inode);
+
+struct vfs_inode *vfs_alloc_inode(void);
+struct vfs_file *vfs_alloc_file(void);
+void vfs_free_file(struct vfs_file *f);
+int devfs_register_chrdev(const char *name, struct vfs_inode_ops *ops, void *priv);
 
 #endif

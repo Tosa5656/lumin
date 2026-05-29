@@ -5,10 +5,16 @@
 #define SYS_write   1
 #define SYS_open    2
 #define SYS_close   3
+#define SYS_pipe    4
 #define SYS_readdir 5
 #define SYS_stat    6
 #define SYS_clear   7
 #define SYS_reboot  8
+#define SYS_dup     9
+#define SYS_dup2    10
+#define SYS_kill    11
+#define SYS_sigaction 12
+#define SYS_sigreturn 13
 #define SYS_yield   24
 #define SYS_getpid  39
 #define SYS_brk     45

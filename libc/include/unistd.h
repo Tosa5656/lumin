@@ -13,5 +13,8 @@ int sched_yield(void);
 void *sbrk(long increment);
 int getcwd(char *buf, unsigned long size);
 int chdir(const char *path);
+int pipe(int pipefd[2]);
+int dup(int oldfd);
+int dup2(int oldfd, int newfd);
 
 #endif

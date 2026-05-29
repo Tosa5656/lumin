@@ -529,6 +529,107 @@ int task_waitpid_nb(int pid)
     return -1;
 }
 
+int task_kill(int pid, int sig)
+{
+    if (sig < 1 || sig > 31) return -1;
+
+    if (pid <= 0) return -1;
+
+    for (int i = 0; i < MAX_TASKS; i++)
+    {
+        if (tasks[i].pid == pid && tasks[i].state != TASK_FREE)
+        {
+            if (sig == SIGKILL)
+            {
+                if (current_task == &tasks[i])
+                {
+                    task_exit(9);
+                    return 0;
+                }
+                tasks[i].sig_pending = 0;
+                tasks[i].state = TASK_FREE;
+                free_pid(tasks[i].pid);
+                task_count--;
+                return 0;
+            }
+
+            tasks[i].sig_pending |= (1ULL << sig);
+
+            if (sig == SIGTERM && tasks[i].sig_actions[sig].sa_handler == SIG_DFL)
+            {
+                tasks[i].state = TASK_FREE;
+                free_pid(tasks[i].pid);
+                task_count--;
+                return 0;
+            }
+
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int task_sigaction(int sig, const struct sigaction *act, struct sigaction *oldact)
+{
+    if (!current_task || sig < 1 || sig > 31) return -1;
+    if (sig == SIGKILL || sig == SIGSTOP) return -1;
+
+    if (oldact)
+        *oldact = current_task->sig_actions[sig];
+    if (act)
+        current_task->sig_actions[sig] = *act;
+
+    return 0;
+}
+
+static int task_deliver_signal(int sig)
+{
+    if (!current_task) return -1;
+
+    current_task->sig_pending &= ~(1ULL << sig);
+
+    if (sig == SIGKILL)
+    {
+        task_exit(9);
+        return 0;
+    }
+
+    void (*handler)(int) = current_task->sig_actions[sig].sa_handler;
+
+    if (handler == SIG_IGN)
+        return 0;
+
+    if (handler == SIG_DFL)
+    {
+        if (sig == SIGTERM || sig == SIGINT || sig == SIGQUIT ||
+            sig == SIGILL || sig == SIGSEGV || sig == SIGFPE ||
+            sig == SIGBUS || sig == SIGABRT || sig == SIGTRAP)
+        {
+            task_exit(128 + sig);
+        }
+        return 0;
+    }
+
+    return 0;
+}
+
+void task_check_signals(void)
+{
+    if (!current_task) return;
+
+    sigset_t pending = current_task->sig_pending & ~current_task->sig_blocked;
+    if (!pending) return;
+
+    for (int sig = 1; sig <= 31; sig++)
+    {
+        if (pending & (1ULL << sig))
+        {
+            task_deliver_signal(sig);
+            return;
+        }
+    }
+}
+
 int task_getpid(void)
 {
     if (!current_task) return -1;

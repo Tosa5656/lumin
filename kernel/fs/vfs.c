@@ -477,11 +477,6 @@ static struct vfs_inode  devfs_dev_inode;
 static struct vfs_superblock devfs_sb;
 static struct vfs_superblock devfs_dev_sb;
 
-static struct vfs_inode *devfs_alloc_inode(struct vfs_superblock *sb)
-{
-    return (struct vfs_inode *)kmalloc(sizeof(struct vfs_inode));
-}
-
 static void devfs_destroy_inode(struct vfs_inode *inode)
 {
     if (!inode || inode == &devfs_root_inode || inode == &devfs_dev_inode) return;
@@ -501,6 +496,97 @@ static int devfs_dir_readdir(struct vfs_inode *dir, uint32_t index, struct vfs_d
     entry->ino  = d->entries[index].ino;
     entry->type = d->entries[index].type;
     entry->size = d->entries[index].size;
+    return 0;
+}
+
+static int devfs_chr_read(struct vfs_inode *inode, uint64_t offset, uint64_t size, void *buf);
+static int devfs_chr_write(struct vfs_inode *inode, uint64_t offset, uint64_t size, const void *buf);
+static struct vfs_inode_ops devfs_chr_ops = {
+    .read     = devfs_chr_read,
+    .write    = devfs_chr_write,
+};
+
+static int devfs_chr_read(struct vfs_inode *inode, uint64_t offset, uint64_t size, void *buf)
+{
+    (void)offset;
+    struct vfs_inode_ops *ops = (struct vfs_inode_ops *)inode->private;
+    if (!ops || !ops->read) return -1;
+    return ops->read(inode, 0, size, buf);
+}
+
+static int devfs_chr_write(struct vfs_inode *inode, uint64_t offset, uint64_t size, const void *buf)
+{
+    (void)offset;
+    struct vfs_inode_ops *ops = (struct vfs_inode_ops *)inode->private;
+    if (!ops || !ops->write) return -1;
+    return ops->write(inode, 0, size, buf);
+}
+
+static struct vfs_inode *devfs_alloc_inode(struct vfs_superblock *sb)
+{
+    (void)sb;
+    struct vfs_inode *in = (struct vfs_inode *)kmalloc(sizeof(struct vfs_inode));
+    if (in) {
+        in->ino = 0;
+        in->type = VFS_FILE;
+        in->size = 0;
+        in->sb = NULL;
+        in->ops = NULL;
+        in->private = NULL;
+        in->refcount = 1;
+    }
+    return in;
+}
+
+struct vfs_inode *vfs_alloc_inode(void)
+{
+    return devfs_alloc_inode(NULL);
+}
+
+struct vfs_file *vfs_alloc_file(void)
+{
+    int idx = -1;
+    for (int i = 0; i < VFS_FILE_MAX; i++)
+    {
+        if (file_table[i].inode == NULL)
+        {
+            idx = i;
+            break;
+        }
+    }
+    if (idx < 0) return NULL;
+    if (idx >= file_count) file_count = idx + 1;
+    file_table[idx].inode = NULL;
+    file_table[idx].offset = 0;
+    file_table[idx].flags = 0;
+    return &file_table[idx];
+}
+
+void vfs_free_file(struct vfs_file *f)
+{
+    if (!f) return;
+    f->inode = NULL;
+    f->offset = 0;
+    f->flags = 0;
+}
+
+int devfs_register_chrdev(const char *name, struct vfs_inode_ops *ops, void *priv)
+{
+    (void)priv;
+    struct devfs_data *dev = &devfs_dev_data;
+    if (dev->entry_count >= DEVFS_MAX_ENTRIES)
+        return -1;
+
+    struct devfs_entry *e = &dev->entries[dev->entry_count++];
+    int k;
+    for (k = 0; name[k] && k < VFS_NAME_MAX - 1; k++)
+        e->name[k] = name[k];
+    e->name[k] = '\0';
+    e->ino   = dev->next_ino++;
+    e->type  = VFS_CHRDEV;
+    e->size  = 0;
+    e->private = ops;
+    serial_printf("devfs: registered char device '/dev/%s'\n", name);
     return 0;
 }
 
@@ -549,6 +635,10 @@ static int devfs_dir_lookup(struct vfs_inode *dir, const char *name, struct vfs_
                     .mkdir    = NULL,
                 };
                 inode->ops = &blk_ops;
+            }
+            else if (inode->type == VFS_CHRDEV)
+            {
+                inode->ops = &devfs_chr_ops;
             }
 
             *child = inode;

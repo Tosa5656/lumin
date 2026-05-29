@@ -2,6 +2,43 @@
 #include <stddef.h>
 #include "ports.h"
 #include "kprintf.h"
+#include "fs/vfs.h"
+#include "include/initcall.h"
+
+static int serial_chr_read(struct vfs_inode *inode, uint64_t offset, uint64_t count, void *buf)
+{
+    (void)inode; (void)offset;
+    unsigned char *cbuf = (unsigned char *)buf;
+    int i;
+    for (i = 0; i < (int)count; i++)
+    {
+        int c = serial_readchar();
+        if (c < 0) break;
+        cbuf[i] = (unsigned char)c;
+    }
+    return i ? i : (count ? -1 : 0);
+}
+
+static int serial_chr_write(struct vfs_inode *inode, uint64_t offset, uint64_t count, const void *buf)
+{
+    (void)inode; (void)offset;
+    const char *cbuf = (const char *)buf;
+    for (uint64_t i = 0; i < count; i++)
+        serial_putchar(cbuf[i]);
+    return (int)count;
+}
+
+static struct vfs_inode_ops serial_chr_ops = {
+    .read  = serial_chr_read,
+    .write = serial_chr_write,
+};
+
+static int serial_chr_init(void)
+{
+    devfs_register_chrdev("ttyS0", &serial_chr_ops, NULL);
+    return 0;
+}
+pure_initcall(serial_chr_init);
 
 void serial_init(void)
 {

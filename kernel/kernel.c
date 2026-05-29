@@ -16,6 +16,7 @@
 #include "fs/vfs.h"
 #include "fs/fat32.h"
 #include "keyboard.h"
+#include "include/initcall.h"
 
 
 unsigned char keyboard_color;
@@ -149,6 +150,7 @@ void kmain(void)
     vfs_mount_devfs("/dev");
     serial_printf("vfs: devfs mounted at '/dev'\n");
     fb_puts("devfs mounted at /dev\n");
+    do_initcalls();
 
     serial_write("vfs: scanning partitions...\n");
     fb_puts("partitions:\n");

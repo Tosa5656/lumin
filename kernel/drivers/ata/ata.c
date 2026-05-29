@@ -4,7 +4,11 @@
 #include "block/block.h"
 #include "kprintf.h"
 #include "mm/pmm.h"
+#include "drivers/pci/pci.h"
+#include "include/initcall.h"
 #include <stddef.h>
+
+static int ata_bmdma_probe(struct ata_device *dev);
 
 #define TIMEOUT_TSC 500000000ULL
 #define MAX_DEVICES 4
@@ -357,9 +361,6 @@ static int ata_detect(int bus, int drv, struct ata_device *dev)
     return 0;
 }
 
-/* Forward declarations for BMDMA functions used by ata_init */
-static int ata_bmdma_probe(struct ata_device *dev);
-
 int ata_init(void)
 {
     device_count = 0;
@@ -548,72 +549,38 @@ struct prd_entry {
     uint16_t flags;
 };
 
-static uint32_t pci_conf_read(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
-{
-    uint32_t addr = 0x80000000U | ((uint32_t)bus << 16) | ((uint32_t)slot << 11)
-                  | ((uint32_t)func << 8) | (offset & 0xFC);
-    outl(0xCF8, addr);
-    return inl(0xCFC);
-}
+static struct pci_device *ata_pci_controller;
 
 static int ata_bmdma_probe(struct ata_device *dev)
 {
-    for (int slot = 0; slot < 32; slot++)
+    if (!ata_pci_controller)
     {
-        uint16_t vendor = (uint16_t)(pci_conf_read(0, slot, 0, 0) & 0xFFFF);
-        if (vendor == 0xFFFF) continue;
-
-        int max_func = 1;
-        uint8_t hdr = (pci_conf_read(0, slot, 0, 0x0C) >> 16) & 0xFF;
-        if (hdr & 0x80) max_func = 8;
-
-        for (int func = 0; func < max_func; func++)
-        {
-            if (func > 0)
-            {
-                vendor = (uint16_t)(pci_conf_read(0, slot, func, 0) & 0xFFFF);
-                if (vendor == 0xFFFF) continue;
-            }
-
-            uint32_t class_reg = pci_conf_read(0, slot, func, 0x08);
-            uint8_t class  = (class_reg >> 24) & 0xFF;
-            uint8_t sub    = (class_reg >> 16) & 0xFF;
-            uint8_t progif = (class_reg >> 8) & 0xFF;
-
-            if (class != 0x01 || sub != 0x01)
-                continue;
-
-            if (!(progif & 0x80))
-            {
-                serial_printf("ATA: IDE controller at %02x:%02x.%d has no Bus Master\n",
-                              slot, func);
-                continue;
-            }
-
-            uint32_t bar4 = pci_conf_read(0, slot, func, 0x20);
-            uint16_t bm_base = (uint16_t)(bar4 & 0xFFFC);
-            if (bm_base == 0) continue;
-
-            int expect_func = (dev->bus == ATA_BUS_PRIMARY) ? (func & ~1) : (func | 1);
-            if (func != expect_func) continue;
-
-            void *prdt = pmm_alloc();
-            if (!prdt) return -1;
-
-            for (int i = 0; i < 512; i++)
-                ((uint32_t *)prdt)[i] = 0;
-
-            dev->bmdma_avail  = 1;
-            dev->bmdma_base   = bm_base + (dev->bus == ATA_BUS_SECONDARY ? 8 : 0);
-            dev->prdt_phys    = prdt;
-            dev->prdt_entries = 0;
-
-            serial_printf("ATA: BMDMA at 0x%04x (PRDT at %p)\n",
-                          dev->bmdma_base, prdt);
-            return 0;
-        }
+        ata_pci_controller = pci_find_device_by_class(0x01, 0x01);
+        if (!ata_pci_controller)
+            return -1;
     }
-    return -1;
+
+    uint16_t bm_base = (uint16_t)(ata_pci_controller->bar[4] & 0xFFFC);
+    if (bm_base == 0 || !(ata_pci_controller->prog_if & 0x80))
+    {
+        serial_printf("ATA: IDE controller has no Bus Master\n");
+        return -1;
+    }
+
+    void *prdt = pmm_alloc_below(0x100000000ULL);
+    if (!prdt) return -1;
+
+    for (int i = 0; i < 128; i++)
+        ((uint32_t *)prdt)[i] = 0;
+
+    dev->bmdma_avail  = 1;
+    dev->bmdma_base   = bm_base + (dev->bus == ATA_BUS_SECONDARY ? 8 : 0);
+    dev->prdt_phys    = prdt;
+    dev->prdt_entries = 0;
+
+    serial_printf("ATA: BMDMA at 0x%04x (PRDT at %p)\n",
+                  dev->bmdma_base, prdt);
+    return 0;
 }
 
 static int ata_bmdma_start(struct ata_device *dev, int write, struct prd_entry *prdt, int count)
@@ -664,6 +631,12 @@ static int ata_bmdma_setup_prdt(struct ata_device *dev, const void *buf, uint64_
 {
     uint64_t phys = (uint64_t)(uintptr_t)buf;
     int count = 0;
+
+    if ((phys + total_bytes) > 0x100000000ULL)
+    {
+        serial_printf("ATA: buffer above 4GB, DMA not possible (phys=%p)\n", (void*)phys);
+        return -1;
+    }
 
     while (total_bytes > 0 && count < max_entries)
     {

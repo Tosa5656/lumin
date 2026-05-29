@@ -1,5 +1,7 @@
 #include "rtc.h"
 #include "ports.h"
+#include "fs/vfs.h"
+#include "include/initcall.h"
 
 #define CMOS_INDEX 0x70
 #define CMOS_DATA  0x71
@@ -14,6 +16,31 @@ static int bcd_to_bin(int bcd)
 {
     return (bcd & 0x0F) + ((bcd >> 4) * 10);
 }
+
+static int rtc_chr_read(struct vfs_inode *inode, uint64_t offset, uint64_t count, void *buf)
+{
+    (void)inode; (void)offset;
+    struct rtc_time tm;
+    if (rtc_read(&tm) != 0)
+        return -1;
+    uint64_t sz = sizeof(tm);
+    if (count < sz) sz = count;
+    for (uint64_t i = 0; i < sz; i++)
+        ((unsigned char *)buf)[i] = ((const unsigned char *)&tm)[i];
+    return (int)sz;
+}
+
+static struct vfs_inode_ops rtc_chr_ops = {
+    .read  = rtc_chr_read,
+    .write = NULL,
+};
+
+static int rtc_chr_init(void)
+{
+    devfs_register_chrdev("rtc", &rtc_chr_ops, NULL);
+    return 0;
+}
+pure_initcall(rtc_chr_init);
 
 int rtc_read(struct rtc_time *tm)
 {

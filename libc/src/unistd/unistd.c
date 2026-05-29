@@ -56,3 +56,18 @@ int chdir(const char *path)
 {
     return (int)syscall(SYS_chdir, (long)path, 0, 0);
 }
+
+int pipe(int pipefd[2])
+{
+    return (int)syscall(SYS_pipe, (long)pipefd, 0, 0);
+}
+
+int dup(int oldfd)
+{
+    return (int)syscall(SYS_dup, (long)oldfd, 0, 0);
+}
+
+int dup2(int oldfd, int newfd)
+{
+    return (int)syscall(SYS_dup2, (long)oldfd, (long)newfd, 0);
+}

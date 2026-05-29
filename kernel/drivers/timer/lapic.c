@@ -132,3 +132,25 @@ uint64_t lapic_get_base(void)
 {
     return (uint64_t)(uintptr_t)lapic_base;
 }
+
+uint8_t lapic_read_id(void)
+{
+    if (!lapic_ok) return 0;
+    return (uint8_t)(lapic_read(LAPIC_ID) >> 24);
+}
+
+void lapic_send_ipi(uint8_t apic_id, uint32_t type, uint8_t vector)
+{
+    if (!lapic_ok) return;
+
+    while (lapic_read(LAPIC_ICR_LOW) & (1 << 12));
+
+    lapic_write(LAPIC_ICR_HIGH, (uint32_t)apic_id << 24);
+    lapic_write(LAPIC_ICR_LOW, type | vector);
+}
+
+void lapic_enable(void)
+{
+    if (!lapic_ok) return;
+    lapic_write(LAPIC_SVR, lapic_read(LAPIC_SVR) | (1 << 8));
+}

@@ -29,6 +29,8 @@ struct pushaq_frame {
     struct cpu_iretq_frame iretq;
 };
 
+#include "../include/signal.h"
+
 struct task {
     int pid;
     enum task_state state;
@@ -42,6 +44,9 @@ struct task {
     int parent_pid;
     struct vfs_file *fds[MAX_FDS];
     char cwd[512];
+    sigset_t sig_pending;
+    sigset_t sig_blocked;
+    struct sigaction sig_actions[32];
 };
 
 int  task_init(void);
@@ -53,6 +58,9 @@ int  task_waitpid_nb(int pid);
 int  task_waitpid(int pid);
 void task_yield(void);
 uint64_t schedule(uint64_t current_rsp);
+int  task_kill(int pid, int sig);
+int  task_sigaction(int sig, const struct sigaction *act, struct sigaction *oldact);
+void task_check_signals(void);
 
 extern struct task *current_task;
 
