@@ -23,6 +23,11 @@ static int      fb_col = 0;
 static uint32_t fb_fg = FB_DEFAULT_FG;
 static uint32_t fb_bg = FB_DEFAULT_BG;
 
+static uint32_t fb_cursor_save[FB_CHAR_H][FB_CHAR_W];
+static int      fb_cursor_row = 0;
+static int      fb_cursor_col = 0;
+static int      fb_cursor_on = 0;
+
 struct fb_info {
     uint64_t phys_addr;
     uint32_t width;
@@ -32,6 +37,46 @@ struct fb_info {
 };
 
 static void fb_scroll(void);
+
+static void fb_cursor_erase(void)
+{
+    if (!fb_cursor_on) return;
+    uint32_t cx = fb_cursor_col * FB_CHAR_W;
+    uint32_t cy = fb_cursor_row * FB_CHAR_H;
+    for (int r = 0; r < FB_CHAR_H; r++)
+    {
+        volatile uint32_t *line = (volatile uint32_t *)(fb_vaddr + (cy + r) * fb_pitch);
+        for (int col = 0; col < FB_CHAR_W; col++)
+            line[cx + col] = fb_cursor_save[r][col];
+    }
+    fb_cursor_on = 0;
+}
+
+static void fb_cursor_draw(void)
+{
+    fb_cursor_erase();
+
+    fb_cursor_row = fb_row;
+    fb_cursor_col = fb_col;
+    uint32_t cx = fb_col * FB_CHAR_W;
+    uint32_t cy = fb_row * FB_CHAR_H;
+    for (int r = 0; r < FB_CHAR_H; r++)
+    {
+        volatile uint32_t *line = (volatile uint32_t *)(fb_vaddr + (cy + r) * fb_pitch);
+        for (int col = 0; col < FB_CHAR_W; col++)
+            fb_cursor_save[r][col] = line[cx + col];
+    }
+
+    uint32_t cursor_color = 0x00C0C0C0;
+    for (int r = FB_CHAR_H - 2; r < FB_CHAR_H; r++)
+    {
+        volatile uint32_t *line = (volatile uint32_t *)(fb_vaddr + (cy + r) * fb_pitch);
+        for (int col = 0; col < FB_CHAR_W; col++)
+            line[cx + col] = cursor_color;
+    }
+
+    fb_cursor_on = 1;
+}
 
 void fb_init(void)
 {
@@ -87,11 +132,13 @@ void fb_putchar(char c)
     {
         fb_col = 0;
         if (++fb_row >= FB_ROWS) fb_scroll();
+        fb_cursor_draw();
         return;
     }
     if (c == '\r')
     {
         fb_col = 0;
+        fb_cursor_draw();
         return;
     }
     if (c == '\t')
@@ -104,18 +151,13 @@ void fb_putchar(char c)
     if (c == '\b')
     {
         if (fb_col > 0) fb_col--;
-        uint32_t cx = fb_col * FB_CHAR_W;
-        uint32_t cy = fb_row * FB_CHAR_H;
-        for (int r = 0; r < FB_CHAR_H; r++)
-        {
-            volatile uint32_t *line = (volatile uint32_t *)(fb_vaddr + (cy + r) * fb_pitch);
-            for (int col = 0; col < FB_CHAR_W; col++)
-                line[cx + col] = fb_bg;
-        }
+        fb_cursor_draw();
         return;
     }
 
     if ((unsigned char)c < 32) return;
+
+    fb_cursor_erase();
 
     uint32_t cx = fb_col * FB_CHAR_W;
     uint32_t cy = fb_row * FB_CHAR_H;
@@ -133,10 +175,12 @@ void fb_putchar(char c)
         fb_col = 0;
         if (++fb_row >= FB_ROWS) fb_scroll();
     }
+    fb_cursor_draw();
 }
 
 static void fb_scroll(void)
 {
+    fb_cursor_erase();
     uint32_t line_bytes = fb_pitch * FB_CHAR_H;
     int rows = fb_height / FB_CHAR_H;
 
@@ -174,6 +218,7 @@ void fb_printf(const char *fmt, ...)
 
 void fb_clear(uint32_t color)
 {
+    fb_cursor_on = 0;
     fb_fillrect(0, 0, fb_width, fb_height, color);
     fb_row = 0;
     fb_col = 0;

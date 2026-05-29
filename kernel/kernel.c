@@ -15,6 +15,8 @@
 #include "block/block.h"
 #include "fs/vfs.h"
 #include "fs/fat32.h"
+#include "fs/procfs.h"
+#include "fs/tmpfs.h"
 #include "keyboard.h"
 #include "include/initcall.h"
 
@@ -150,6 +152,13 @@ void kmain(void)
     vfs_mount_devfs("/dev");
     serial_printf("vfs: devfs mounted at '/dev'\n");
     fb_puts("devfs mounted at /dev\n");
+
+    vfs_mount_procfs("/proc");
+    serial_printf("vfs: procfs mounted at '/proc'\n");
+
+    vfs_mount_tmpfs("/tmp");
+    serial_printf("vfs: tmpfs mounted at '/tmp'\n");
+
     do_initcalls();
 
     serial_write("vfs: scanning partitions...\n");

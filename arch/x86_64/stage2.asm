@@ -127,7 +127,7 @@ init_pm:
     ; Copy kernel from after stage2 to 0x100000
     mov esi, 0x8000 + STAGE2_SIZE
     mov edi, 0x100000
-    mov ecx, (200 * 512 - STAGE2_SIZE) / 4
+    mov ecx, (216 * 512 - STAGE2_SIZE) / 4
     rep movsd
 
     ; Page tables at 0x1000

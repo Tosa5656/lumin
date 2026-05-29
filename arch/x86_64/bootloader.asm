@@ -12,7 +12,7 @@ _start:
     int 0x13
     jc disk_error
 
-    ; Load stage2 + kernel (200 sectors from LBA 1) to 0x8000
+    ; Load stage2 + kernel (216 sectors from LBA 1) to 0x8000
     mov si, dap
     mov ah, 0x42
     int 0x13
@@ -55,7 +55,7 @@ dap:
 dap2:
     db 0x10
     db 0
-    dw 73
+    dw 89
     dw 0xFE00
     dw 0x0800
     dd 128

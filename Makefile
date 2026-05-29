@@ -5,6 +5,8 @@ CC = x86_64-pc-linux-gnu-gcc
 LD = x86_64-pc-linux-gnu-gcc
 CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zone -I kernel -I os
 LDFLAGS = -m64 -nostdlib -Wl,-T,kernel/kernel.ld,--oformat,binary
+KERNEL_SECTORS = 216
+KERNEL_MAX = $$(( $(KERNEL_SECTORS) * 512 - $(STAGE2_SIZE) ))
 TRUNCATE = truncate
 CAT = cat
 STAGE2_SIZE = 4096
@@ -89,6 +91,10 @@ obj/smp.o: kernel/smp/smp.c
 obj/pipefs.o: kernel/fs/pipefs.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/device.o: kernel/drivers/device.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/procfs.o: kernel/fs/procfs.c
+	${CC} ${CFLAGS} -c $< -o $@
+obj/tmpfs.o: kernel/fs/tmpfs.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/vga.o: kernel/drivers/vga/vga.c
 	${CC} ${CFLAGS} -c $< -o $@
@@ -203,11 +209,11 @@ OBJS = $(CORE_OBJS) \
        $(OBJS_TIMER) obj/pit.o obj/hpet.o obj/lapic.o \
        $(OBJS_PCI) $(OBJS_FB) $(OBJS_ATA) \
        $(OBJS_BLOCK) $(OBJS_VFS) $(OBJS_FAT32) \
-       obj/initcall.o obj/smp.o obj/pipefs.o obj/device.o
+       obj/initcall.o obj/smp.o obj/pipefs.o obj/device.o obj/procfs.o obj/tmpfs.o
 
 kernel: mkdirs bootloader bin/stage2.bin $(OBJS) $(AUTOCONF)
 	${LD} ${LDFLAGS} $(OBJS) -o bin/kernel.bin
-	${TRUNCATE} -s $$((102400 - $(STAGE2_SIZE))) bin/kernel.bin
+	${TRUNCATE} -s $(KERNEL_MAX) bin/kernel.bin
 	${TRUNCATE} -s $(STAGE2_SIZE) bin/stage2.bin
 	${CAT} bin/bootloader.bin bin/stage2.bin bin/kernel.bin > lumin.bin
 
