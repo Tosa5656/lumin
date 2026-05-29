@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
+#include <stddef.h>
 
 unsigned long strlen(const char *s)
 {
@@ -106,4 +107,68 @@ char *strdup(const char *s)
             p[i] = s[i];
     }
     return p;
+}
+
+char *strtok(char *str, const char *delim)
+{
+    static char *save = NULL;
+    return strtok_r(str, delim, &save);
+}
+
+char *strtok_r(char *str, const char *delim, char **saveptr)
+{
+    if (!str)
+        str = *saveptr;
+    if (!str)
+        return NULL;
+
+    while (*str)
+    {
+        const char *d = delim;
+        int is_delim = 0;
+        while (*d)
+        {
+            if (*str == *d)
+            {
+                is_delim = 1;
+                break;
+            }
+            d++;
+        }
+        if (!is_delim)
+            break;
+        str++;
+    }
+
+    if (!*str)
+    {
+        *saveptr = NULL;
+        return NULL;
+    }
+
+    char *start = str;
+    while (*str)
+    {
+        const char *d = delim;
+        int is_delim = 0;
+        while (*d)
+        {
+            if (*str == *d)
+            {
+                is_delim = 1;
+                break;
+            }
+            d++;
+        }
+        if (is_delim)
+        {
+            *str = '\0';
+            *saveptr = str + 1;
+            return start;
+        }
+        str++;
+    }
+
+    *saveptr = NULL;
+    return start;
 }

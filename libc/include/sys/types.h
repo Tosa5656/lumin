@@ -1,7 +1,8 @@
 #ifndef _SYS_TYPES_H
 #define _SYS_TYPES_H
 
-typedef unsigned long size_t;
+#include <stddef.h>
+
 typedef long ssize_t;
 typedef int pid_t;
 

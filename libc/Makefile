@@ -6,12 +6,13 @@ CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zo
 CRT_OBJ = obj/crt0.o
 LIBC_OBJS = obj/errno/errno.o obj/stdlib/exit.o obj/stdlib/malloc.o \
             obj/string/mem.o obj/string/str.o obj/stdio/printf.o \
+            obj/stdio/file.o obj/stdio/fget.o obj/stdio/fput.o obj/stdio/scanf.o \
             obj/unistd/unistd.o obj/signal/signal.o
 
 all: libc.a
 
 mkdirs:
-	mkdir -p obj obj/errno obj/stdlib obj/string obj/stdio obj/unistd obj/signal
+	mkdir -p obj obj/errno obj/stdlib obj/string obj/stdio obj/unistd obj/signal obj/stdio
 
 obj/crt0.o: crt/crt0.asm
 	$(AS) -f elf64 $< -o $@
@@ -38,6 +39,18 @@ obj/unistd/unistd.o: src/unistd/unistd.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 obj/signal/signal.o: src/signal/signal.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+obj/stdio/file.o: src/stdio/file.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+obj/stdio/fget.o: src/stdio/fget.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+obj/stdio/fput.o: src/stdio/fput.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+obj/stdio/scanf.o: src/stdio/scanf.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 libc.a: mkdirs $(CRT_OBJ) $(LIBC_OBJS)

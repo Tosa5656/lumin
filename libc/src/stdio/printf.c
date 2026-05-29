@@ -1,13 +1,15 @@
+#include <stdio.h>
 #include <sys/syscall.h>
-#include <stdarg.h>
 
-static void print_str(const char *s, void (*out)(char))
+typedef void (*putchar_t)(char, void *);
+
+static void print_str(const char *s, putchar_t out, void *ctx)
 {
     for (; *s; s++)
-        out(*s);
+        out(*s, ctx);
 }
 
-static void print_num(unsigned long long n, int base, int upper, void (*out)(char))
+static void print_num(unsigned long long n, int base, int upper, putchar_t out, void *ctx)
 {
     const char *digits = upper ? "0123456789ABCDEF" : "0123456789abcdef";
     char buf[32];
@@ -20,26 +22,16 @@ static void print_num(unsigned long long n, int base, int upper, void (*out)(cha
         n /= base;
     }
     while (i > 0)
-        out(buf[--i]);
+        out(buf[--i], ctx);
 }
 
-static void print_num_signed(long long n, int base, int upper, void (*out)(char))
-{
-    if (n < 0)
-    {
-        out('-');
-        n = -n;
-    }
-    print_num((unsigned long long)n, base, upper, out);
-}
-
-static void vcb_printf(const char *fmt, va_list ap, void (*out)(char))
+void vcb_printf(const char *fmt, va_list ap, putchar_t out, void *ctx)
 {
     for (; *fmt; fmt++)
     {
         if (*fmt != '%')
         {
-            out(*fmt);
+            out(*fmt, ctx);
             continue;
         }
         fmt++;
@@ -66,10 +58,10 @@ static void vcb_printf(const char *fmt, va_list ap, void (*out)(char))
                 int len = 0;
                 while (s[len]) len++;
                 if (!left && pad > len)
-                    for (int i = 0; i < pad - len; i++) out(' ');
-                print_str(s, out);
+                    for (int i = 0; i < pad - len; i++) out(' ', ctx);
+                print_str(s, out, ctx);
                 if (left && pad > len)
-                    for (int i = 0; i < pad - len; i++) out(' ');
+                    for (int i = 0; i < pad - len; i++) out(' ', ctx);
                 break;
             }
             case 'd':
@@ -86,11 +78,11 @@ static void vcb_printf(const char *fmt, va_list ap, void (*out)(char))
                     unsigned long long u = (unsigned long long)tv;
                     do { tmp[tlen++] = '0' + u % 10; u /= 10; } while (u);
                     if (!left && pad > tlen)
-                        for (int i = 0; i < pad - tlen; i++) out(pad_char);
-                    if (v < 0) out('-');
-                    while (tlen > 0) out(tmp[--tlen]);
+                        for (int i = 0; i < pad - tlen; i++) out(pad_char, ctx);
+                    if (v < 0) out('-', ctx);
+                    while (tlen > 0) out(tmp[--tlen], ctx);
                     if (left && pad > tlen)
-                        for (int i = 0; i < pad - tlen; i++) out(' ');
+                        for (int i = 0; i < pad - tlen; i++) out(' ', ctx);
                 }
                 break;
             }
@@ -103,10 +95,10 @@ static void vcb_printf(const char *fmt, va_list ap, void (*out)(char))
                 int tlen = 0;
                 do { tmp[tlen++] = '0' + v % 10; v /= 10; } while (v);
                 if (!left && pad > tlen)
-                    for (int i = 0; i < pad - tlen; i++) out(pad_char);
-                while (tlen > 0) out(tmp[--tlen]);
+                    for (int i = 0; i < pad - tlen; i++) out(pad_char, ctx);
+                while (tlen > 0) out(tmp[--tlen], ctx);
                 if (left && pad > tlen)
-                    for (int i = 0; i < pad - tlen; i++) out(' ');
+                    for (int i = 0; i < pad - tlen; i++) out(' ', ctx);
                 break;
             }
             case 'x':
@@ -121,57 +113,93 @@ static void vcb_printf(const char *fmt, va_list ap, void (*out)(char))
                 const char *digits = upper ? "0123456789ABCDEF" : "0123456789abcdef";
                 do { tmp[tlen++] = digits[v % 16]; v /= 16; } while (v);
                 if (!left && pad > tlen)
-                    for (int i = 0; i < pad - tlen; i++) out(pad_char);
-                while (tlen > 0) out(tmp[--tlen]);
+                    for (int i = 0; i < pad - tlen; i++) out(pad_char, ctx);
+                while (tlen > 0) out(tmp[--tlen], ctx);
                 if (left && pad > tlen)
-                    for (int i = 0; i < pad - tlen; i++) out(' ');
+                    for (int i = 0; i < pad - tlen; i++) out(' ', ctx);
                 break;
             }
             case 'p':
             {
                 void *p = va_arg(ap, void *);
                 unsigned long long v = (unsigned long long)p;
-                out('0');
-                out('x');
+                out('0', ctx);
+                out('x', ctx);
                 if (v == 0)
-                    out('0');
+                    out('0', ctx);
                 else
-                    print_num(v, 16, 0, out);
+                    print_num(v, 16, 0, out, ctx);
                 break;
             }
             case 'c':
             {
                 int c = va_arg(ap, int);
-                out((char)c);
+                out((char)c, ctx);
                 break;
             }
             case '%':
-                out('%');
+                out('%', ctx);
                 break;
             default:
-                out('%');
-                out(*fmt);
+                out('%', ctx);
+                out(*fmt, ctx);
                 break;
         }
     }
 }
 
-static void stdout_putchar(char c)
+struct strbuf {
+    char *buf;
+    unsigned long pos;
+    unsigned long max;
+};
+
+static void strbuf_out(char c, void *ctx)
 {
-    syscall(SYS_write, 1, (long)&c, 1);
+    struct strbuf *sb = (struct strbuf *)ctx;
+    if (sb->pos < sb->max)
+        sb->buf[sb->pos] = c;
+    sb->pos++;
+}
+
+int vsnprintf(char *buf, unsigned long n, const char *fmt, va_list ap)
+{
+    struct strbuf sb;
+    sb.buf = buf;
+    sb.pos = 0;
+    sb.max = n > 0 ? n - 1 : 0;
+
+    vcb_printf(fmt, ap, strbuf_out, &sb);
+
+    if (n > 0)
+        buf[sb.pos < n ? sb.pos : n - 1] = '\0';
+    return (int)sb.pos;
+}
+
+int vsprintf(char *buf, const char *fmt, va_list ap)
+{
+    return vsnprintf(buf, (unsigned long)-1, fmt, ap);
+}
+
+static void stdout_putchar(char c, void *ctx)
+{
+    (void)ctx;
+    unsigned char ch = (unsigned char)c;
+    syscall(SYS_write, 1, (long)&ch, 1);
 }
 
 int putchar(int c)
 {
-    char ch = (char)c;
+    unsigned char ch = (unsigned char)c;
     syscall(SYS_write, 1, (long)&ch, 1);
-    return (unsigned char)ch;
+    return (unsigned char)c;
 }
 
 int puts(const char *s)
 {
-    print_str(s, stdout_putchar);
-    stdout_putchar('\n');
+    for (; *s; s++)
+        stdout_putchar(*s, NULL);
+    stdout_putchar('\n', NULL);
     return 1;
 }
 
@@ -179,7 +207,25 @@ int printf(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    vcb_printf(fmt, ap, stdout_putchar);
+    vcb_printf(fmt, ap, stdout_putchar, NULL);
     va_end(ap);
     return 0;
+}
+
+int sprintf(char *buf, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsprintf(buf, fmt, ap);
+    va_end(ap);
+    return n;
+}
+
+int snprintf(char *buf, unsigned long n, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int r = vsnprintf(buf, n, fmt, ap);
+    va_end(ap);
+    return r;
 }
