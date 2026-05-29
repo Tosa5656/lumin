@@ -1,18 +1,58 @@
 #include <unistd.h>
-
-static inline long syscall(long n, long a1, long a2, long a3)
-{
-    long ret;
-    __asm__ volatile("int $0x30" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2), "d"(a3) : "memory");
-    return ret;
-}
+#include <sys/syscall.h>
 
 ssize_t read(int fd, void *buf, size_t count)
 {
-    return (ssize_t)syscall(0, (long)fd, (long)buf, (long)count);
+    return (ssize_t)syscall(SYS_read, (long)fd, (long)buf, (long)count);
 }
 
 ssize_t write(int fd, const void *buf, size_t count)
 {
-    return (ssize_t)syscall(1, (long)fd, (long)buf, (long)count);
+    return (ssize_t)syscall(SYS_write, (long)fd, (long)buf, (long)count);
+}
+
+int open(const char *path, int flags)
+{
+    return (int)syscall(SYS_open, (long)path, (long)flags, 0);
+}
+
+int close(int fd)
+{
+    return (int)syscall(SYS_close, (long)fd, 0, 0);
+}
+
+pid_t fork(void)
+{
+    return (pid_t)syscall(SYS_fork, 0, 0, 0);
+}
+
+pid_t getpid(void)
+{
+    return (pid_t)syscall(SYS_getpid, 0, 0, 0);
+}
+
+int sched_yield(void)
+{
+    return (int)syscall(SYS_yield, 0, 0, 0);
+}
+
+void *sbrk(long increment)
+{
+    long old = syscall(SYS_brk, 0, 0, 0);
+    if (increment == 0)
+        return (void *)old;
+    long new = syscall(SYS_brk, old + increment, 0, 0);
+    if (new == -1)
+        return (void *)-1;
+    return (void *)old;
+}
+
+int getcwd(char *buf, unsigned long size)
+{
+    return (int)syscall(SYS_getcwd, (long)buf, (long)size, 0);
+}
+
+int chdir(const char *path)
+{
+    return (int)syscall(SYS_chdir, (long)path, 0, 0);
 }

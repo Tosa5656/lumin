@@ -3,6 +3,7 @@
 #include "drivers/serial/serial.h"
 #include "block/block.h"
 #include "kprintf.h"
+#include "mm/pmm.h"
 #include <stddef.h>
 
 #define TIMEOUT_TSC 500000000ULL
@@ -356,6 +357,9 @@ static int ata_detect(int bus, int drv, struct ata_device *dev)
     return 0;
 }
 
+/* Forward declarations for BMDMA functions used by ata_init */
+static int ata_bmdma_probe(struct ata_device *dev);
+
 int ata_init(void)
 {
     device_count = 0;
@@ -377,9 +381,12 @@ int ata_init(void)
             if (ata_detect(bus, drv, dev) == 0 && dev->present)
             {
                 ata_identify(dev);
+                dev->bmdma_avail = 0;
                 serial_printf("ATA: %s %s detected",
                               (bus == ATA_BUS_PRIMARY) ? "primary" : "secondary",
                               (drv == ATA_MASTER) ? "master" : "slave");
+                if (dev->type == ATA_PATA)
+                    ata_bmdma_probe(dev);
                 if (dev->type != ATA_NONE)
                 {
                     const char *typestr = "?";
@@ -516,4 +523,255 @@ int ata_soft_reset(struct ata_device *dev)
     for (volatile int i = 0; i < 5000; i++);
 
     return 0;
+}
+
+#define BMDMA_CMD_START 1
+#define BMDMA_CMD_STOP  0
+#define BMDMA_CMD_READ  0
+#define BMDMA_CMD_WRITE 8
+
+#define BMDMA_STAT_ACTIVE   (1 << 0)
+#define BMDMA_STAT_ERROR    (1 << 1)
+#define BMDMA_STAT_INT      (1 << 2)
+#define BMDMA_STAT_DRV0     (1 << 5)
+#define BMDMA_STAT_DRV1     (1 << 6)
+#define BMDMA_STAT_SIMPLEX  (1 << 7)
+
+#define CMD_READ_DMA      0xC8
+#define CMD_READ_DMA_EXT  0x25
+#define CMD_WRITE_DMA     0xCA
+#define CMD_WRITE_DMA_EXT 0x35
+
+struct prd_entry {
+    uint32_t buf_phys;
+    uint16_t byte_count;
+    uint16_t flags;
+};
+
+static uint32_t pci_conf_read(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
+{
+    uint32_t addr = 0x80000000U | ((uint32_t)bus << 16) | ((uint32_t)slot << 11)
+                  | ((uint32_t)func << 8) | (offset & 0xFC);
+    outl(0xCF8, addr);
+    return inl(0xCFC);
+}
+
+static int ata_bmdma_probe(struct ata_device *dev)
+{
+    for (int slot = 0; slot < 32; slot++)
+    {
+        uint16_t vendor = (uint16_t)(pci_conf_read(0, slot, 0, 0) & 0xFFFF);
+        if (vendor == 0xFFFF) continue;
+
+        int max_func = 1;
+        uint8_t hdr = (pci_conf_read(0, slot, 0, 0x0C) >> 16) & 0xFF;
+        if (hdr & 0x80) max_func = 8;
+
+        for (int func = 0; func < max_func; func++)
+        {
+            if (func > 0)
+            {
+                vendor = (uint16_t)(pci_conf_read(0, slot, func, 0) & 0xFFFF);
+                if (vendor == 0xFFFF) continue;
+            }
+
+            uint32_t class_reg = pci_conf_read(0, slot, func, 0x08);
+            uint8_t class  = (class_reg >> 24) & 0xFF;
+            uint8_t sub    = (class_reg >> 16) & 0xFF;
+            uint8_t progif = (class_reg >> 8) & 0xFF;
+
+            if (class != 0x01 || sub != 0x01)
+                continue;
+
+            if (!(progif & 0x80))
+            {
+                serial_printf("ATA: IDE controller at %02x:%02x.%d has no Bus Master\n",
+                              slot, func);
+                continue;
+            }
+
+            uint32_t bar4 = pci_conf_read(0, slot, func, 0x20);
+            uint16_t bm_base = (uint16_t)(bar4 & 0xFFFC);
+            if (bm_base == 0) continue;
+
+            int expect_func = (dev->bus == ATA_BUS_PRIMARY) ? (func & ~1) : (func | 1);
+            if (func != expect_func) continue;
+
+            void *prdt = pmm_alloc();
+            if (!prdt) return -1;
+
+            for (int i = 0; i < 512; i++)
+                ((uint32_t *)prdt)[i] = 0;
+
+            dev->bmdma_avail  = 1;
+            dev->bmdma_base   = bm_base + (dev->bus == ATA_BUS_SECONDARY ? 8 : 0);
+            dev->prdt_phys    = prdt;
+            dev->prdt_entries = 0;
+
+            serial_printf("ATA: BMDMA at 0x%04x (PRDT at %p)\n",
+                          dev->bmdma_base, prdt);
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static int ata_bmdma_start(struct ata_device *dev, int write, struct prd_entry *prdt, int count)
+{
+    uint16_t base = dev->bmdma_base;
+
+    outb(base, BMDMA_CMD_STOP);
+    outb(base + 2, 0xFF);
+
+    uint8_t cmd = write ? BMDMA_CMD_WRITE : BMDMA_CMD_READ;
+
+    uint32_t prdt_phys = (uint32_t)(uintptr_t)dev->prdt_phys;
+    outl(base + 4, prdt_phys);
+
+    struct prd_entry *dma_prdt = (struct prd_entry *)dev->prdt_phys;
+    for (int i = 0; i < count; i++)
+        dma_prdt[i] = prdt[i];
+    if (count > 0)
+        dma_prdt[count - 1].flags |= 0x8000;
+
+    outb(base, cmd | BMDMA_CMD_START);
+    return 0;
+}
+
+static int ata_bmdma_poll(struct ata_device *dev, uint64_t timeout_us)
+{
+    uint16_t base = dev->bmdma_base;
+    uint64_t deadline = rdtsc() + timeout_us * 2000;
+
+    while (rdtsc() < deadline)
+    {
+        uint8_t stat = inb(base + 2);
+        if (!(stat & BMDMA_STAT_ACTIVE))
+        {
+            if (stat & BMDMA_STAT_ERROR)
+                return -1;
+            return 0;
+        }
+        __asm__ volatile("pause");
+    }
+
+    outb(base, BMDMA_CMD_STOP);
+    return -1;
+}
+
+static int ata_bmdma_setup_prdt(struct ata_device *dev, const void *buf, uint64_t total_bytes,
+                                 struct prd_entry *prdt, int max_entries)
+{
+    uint64_t phys = (uint64_t)(uintptr_t)buf;
+    int count = 0;
+
+    while (total_bytes > 0 && count < max_entries)
+    {
+        uint32_t chunk32 = (total_bytes >= 65536) ? 65536 : (uint32_t)(total_bytes & 0xFFFE);
+        if (chunk32 == 0) chunk32 = 65536;
+
+        prdt[count].buf_phys    = (uint32_t)(phys & 0xFFFFFFFF);
+        prdt[count].byte_count  = (uint16_t)chunk32;
+        prdt[count].flags       = 0;
+
+        phys += chunk32;
+        total_bytes -= chunk32;
+        count++;
+    }
+
+    return count;
+}
+
+int ata_read_dma(struct ata_device *dev, uint64_t lba, uint16_t count, void *buf)
+{
+    if (count == 0 || !buf || !dev->bmdma_avail)
+        return -1;
+
+    int bus = (dev->bus == ATA_BUS_PRIMARY) ? ATA_PRIMARY_BUS : ATA_SECONDARY_BUS;
+
+    uint64_t total_bytes = (uint64_t)count * 512;
+    struct prd_entry prdt[256];
+    int prd_count = ata_bmdma_setup_prdt(dev, buf, total_bytes, prdt, 256);
+    if (prd_count <= 0) return -1;
+
+    if (poll_bsy(bus)) return -1;
+
+    if (dev->lba48)
+    {
+        outb(reg_sector_count(bus), (count >> 8) & 0xFF);
+        outb(reg_lba_lo(bus), (lba >> 24) & 0xFF);
+        outb(reg_lba_mid(bus), (lba >> 32) & 0xFF);
+        outb(reg_lba_hi(bus), (lba >> 40) & 0xFF);
+        outb(reg_sector_count(bus), count & 0xFF);
+        outb(reg_lba_lo(bus), lba & 0xFF);
+        outb(reg_lba_mid(bus), (lba >> 8) & 0xFF);
+        outb(reg_lba_hi(bus), (lba >> 16) & 0xFF);
+        outb(reg_drive(bus), 0x40 | ((dev->drive == ATA_SLAVE) ? 0x10 : 0));
+        ata_io_wait(bus);
+        if (ata_bmdma_start(dev, 0, prdt, prd_count)) return -1;
+        outb(reg_cmd(bus), CMD_READ_DMA_EXT);
+    }
+    else
+    {
+        outb(reg_drive(bus), 0xE0 | ((dev->drive == ATA_SLAVE) ? 0x10 : 0) | ((lba >> 24) & 0x0F));
+        outb(reg_sector_count(bus), count);
+        outb(reg_lba_lo(bus), lba & 0xFF);
+        outb(reg_lba_mid(bus), (lba >> 8) & 0xFF);
+        outb(reg_lba_hi(bus), (lba >> 16) & 0xFF);
+        ata_io_wait(bus);
+        if (ata_bmdma_start(dev, 0, prdt, prd_count)) return -1;
+        outb(reg_cmd(bus), CMD_READ_DMA);
+    }
+
+    ata_io_wait(bus);
+    int r = ata_bmdma_poll(dev, 5000000);
+    return r;
+}
+
+int ata_write_dma(struct ata_device *dev, uint64_t lba, uint16_t count, const void *buf)
+{
+    if (count == 0 || !buf || !dev->bmdma_avail)
+        return -1;
+
+    int bus = (dev->bus == ATA_BUS_PRIMARY) ? ATA_PRIMARY_BUS : ATA_SECONDARY_BUS;
+
+    uint64_t total_bytes = (uint64_t)count * 512;
+    struct prd_entry prdt[256];
+    int prd_count = ata_bmdma_setup_prdt(dev, buf, total_bytes, prdt, 256);
+    if (prd_count <= 0) return -1;
+
+    if (poll_bsy(bus)) return -1;
+
+    if (dev->lba48)
+    {
+        outb(reg_sector_count(bus), (count >> 8) & 0xFF);
+        outb(reg_lba_lo(bus), (lba >> 24) & 0xFF);
+        outb(reg_lba_mid(bus), (lba >> 32) & 0xFF);
+        outb(reg_lba_hi(bus), (lba >> 40) & 0xFF);
+        outb(reg_sector_count(bus), count & 0xFF);
+        outb(reg_lba_lo(bus), lba & 0xFF);
+        outb(reg_lba_mid(bus), (lba >> 8) & 0xFF);
+        outb(reg_lba_hi(bus), (lba >> 16) & 0xFF);
+        outb(reg_drive(bus), 0x40 | ((dev->drive == ATA_SLAVE) ? 0x10 : 0));
+        ata_io_wait(bus);
+        if (ata_bmdma_start(dev, 1, prdt, prd_count)) return -1;
+        outb(reg_cmd(bus), CMD_WRITE_DMA_EXT);
+    }
+    else
+    {
+        outb(reg_drive(bus), 0xE0 | ((dev->drive == ATA_SLAVE) ? 0x10 : 0) | ((lba >> 24) & 0x0F));
+        outb(reg_sector_count(bus), count);
+        outb(reg_lba_lo(bus), lba & 0xFF);
+        outb(reg_lba_mid(bus), (lba >> 8) & 0xFF);
+        outb(reg_lba_hi(bus), (lba >> 16) & 0xFF);
+        ata_io_wait(bus);
+        if (ata_bmdma_start(dev, 1, prdt, prd_count)) return -1;
+        outb(reg_cmd(bus), CMD_WRITE_DMA);
+    }
+
+    ata_io_wait(bus);
+    int r = ata_bmdma_poll(dev, 5000000);
+    if (r == 0)
+        ata_flush(dev);
+    return r;
 }

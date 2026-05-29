@@ -9,7 +9,10 @@
 #define SYS_stat    6
 #define SYS_clear   7
 #define SYS_reboot  8
+#define SYS_yield   24
+#define SYS_getpid  39
 #define SYS_brk     45
+#define SYS_fork    57
 #define SYS_spawn   59
 #define SYS_exit    60
 #define SYS_waitpid 61
@@ -37,27 +40,6 @@ static inline int waitpid(int pid)
     return code;
 }
 
-static inline void *sbrk(long increment)
-{
-    long old = syscall(SYS_brk, 0, 0, 0);
-    if (increment == 0)
-        return (void *)old;
-    long new = syscall(SYS_brk, old + increment, 0, 0);
-    if (new == -1)
-        return (void *)-1;
-    return (void *)old;
-}
-
-static inline int open(const char *path, int flags)
-{
-    return (int)syscall(SYS_open, (long)path, (long)flags, 0);
-}
-
-static inline int close(int fd)
-{
-    return (int)syscall(SYS_close, (long)fd, 0, 0);
-}
-
 static inline int readdir(const char *path, unsigned int index, struct vfs_dentry *entry)
 {
     return (int)syscall(SYS_readdir, (long)path, (long)index, (long)entry);
@@ -76,16 +58,6 @@ static inline void clear(void)
 static inline void reboot(void)
 {
     syscall(SYS_reboot, 0, 0, 0);
-}
-
-static inline int getcwd(char *buf, unsigned long size)
-{
-    return (int)syscall(SYS_getcwd, (long)buf, (long)size, 0);
-}
-
-static inline int chdir(const char *path)
-{
-    return (int)syscall(SYS_chdir, (long)path, 0, 0);
 }
 
 #endif

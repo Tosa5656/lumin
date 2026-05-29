@@ -123,6 +123,6 @@ isr48_handler:
     pushaq
     mov rdi, rsp
     call syscall_entry
-    mov [rsp + 112], rax
+    mov rsp, rax
     popaq
     iretq

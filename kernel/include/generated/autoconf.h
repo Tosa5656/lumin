@@ -18,5 +18,4 @@
 #define CONFIG_TIMER_HPET 1
 #define CONFIG_SHELL 1
 #define CONFIG_HELLO 1
-#define CONFIG_AS 1
 #define CONFIG_COREUTILS 1

@@ -38,6 +38,10 @@ struct ata_device
     uint64_t           sectors;
     struct ata_identify ident;
     char               model[41];
+    int                bmdma_avail;
+    uint16_t           bmdma_base;
+    void              *prdt_phys;
+    int                prdt_entries;
 };
 
 int  ata_init(void);
@@ -48,5 +52,7 @@ int  ata_read_sectors(struct ata_device *dev, uint64_t lba, uint16_t count, void
 int  ata_write_sectors(struct ata_device *dev, uint64_t lba, uint16_t count, const void *buf);
 int  ata_flush(struct ata_device *dev);
 int  ata_soft_reset(struct ata_device *dev);
+int  ata_read_dma(struct ata_device *dev, uint64_t lba, uint16_t count, void *buf);
+int  ata_write_dma(struct ata_device *dev, uint64_t lba, uint16_t count, const void *buf);
 
 #endif

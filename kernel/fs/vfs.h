@@ -77,6 +77,7 @@ int  vfs_mount_devfs(const char *path);
 struct block_device *vfs_get_block_device(const char *path);
 
 struct vfs_file *vfs_open(const char *path, int flags);
+struct vfs_file *vfs_dup(struct vfs_file *file);
 int  vfs_read(struct vfs_file *file, uint64_t size, void *buf);
 int  vfs_write(struct vfs_file *file, uint64_t size, const void *buf);
 int  vfs_close(struct vfs_file *file);

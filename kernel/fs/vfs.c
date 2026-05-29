@@ -231,6 +231,34 @@ int vfs_write(struct vfs_file *file, uint64_t size, const void *buf)
     return r;
 }
 
+struct vfs_file *vfs_dup(struct vfs_file *file)
+{
+    if (!file || !file->inode)
+        return NULL;
+
+    int idx = -1;
+    for (int i = 0; i < VFS_FILE_MAX; i++)
+    {
+        if (file_table[i].inode == NULL)
+        {
+            idx = i;
+            break;
+        }
+    }
+    if (idx < 0)
+        return NULL;
+
+    if (idx >= file_count)
+        file_count = idx + 1;
+
+    struct vfs_file *f = &file_table[idx];
+    vfs_inode_ref(file->inode);
+    f->inode  = file->inode;
+    f->offset = file->offset;
+    f->flags  = file->flags;
+    return f;
+}
+
 int vfs_close(struct vfs_file *file)
 {
     if (!file || !file->inode)

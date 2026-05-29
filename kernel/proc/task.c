@@ -389,13 +389,6 @@ int task_fork(struct pushaq_frame *frame)
     if (!pml4)
         return -1;
 
-    for (int i = 256; i < 512; i++)
-    {
-        uint64_t *pt;
-        __asm__("mov %%cr3, %%rax; mov %%rax, %0" : "=r"(pt));
-        (void)pt;
-    }
-
     void *kstack = pmm_alloc_pages(KSTACK_PAGES);
     void *ustack = pmm_alloc();
     if (!kstack || !ustack)
@@ -507,7 +500,12 @@ int task_fork(struct pushaq_frame *frame)
     t->exit_code   = 0;
     t->parent_pid  = current_task->pid;
     for (int i = 0; i < MAX_FDS; i++)
-        t->fds[i] = NULL;
+    {
+        if (current_task->fds[i])
+            t->fds[i] = vfs_dup(current_task->fds[i]);
+        else
+            t->fds[i] = NULL;
+    }
 
     task_count++;
     serial_printf("fork: child pid=%d\n", child_pid);
@@ -539,7 +537,7 @@ int task_getpid(void)
 
 void task_yield(void)
 {
-    __asm__ volatile("int $0x30" : : "a"(45), "D"(0), "S"(0), "d"(0) : "memory");
+    __asm__ volatile("int $0x30" : : "a"(24), "D"(0), "S"(0), "d"(0) : "memory");
 }
 
 uint64_t schedule(uint64_t current_rsp)

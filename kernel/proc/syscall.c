@@ -110,6 +110,7 @@ static void normalize_path(const char *cwd, const char *input, char *output, uin
 uint64_t syscall_entry(struct pushaq_frame *frame)
 {
     uint64_t nr = frame->rax;
+    uint64_t result = 0;
 
     switch (nr)
     {
@@ -130,7 +131,8 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
                 }
             }
 
-            return count;
+            result = count;
+            break;
         }
 
         case SYS_READ:
@@ -152,12 +154,15 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
                     buf[read++] = (char)c;
                 }
-                return read;
+                result = read;
+                break;
             }
 
             if (!current_task || fd < 0 || fd >= MAX_FDS || !current_task->fds[fd])
-                return -1;
-            return vfs_read(current_task->fds[fd], count, buf);
+                result = -1;
+            else
+                result = vfs_read(current_task->fds[fd], count, buf);
+            break;
         }
 
         case SYS_OPEN:
@@ -166,11 +171,17 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             int flags = (int)frame->rsi;
 
             if (!current_task || current_task->pid == 0)
-                return -1;
+            {
+                result = -1;
+                break;
+            }
 
             struct vfs_file *f = vfs_open(path, flags);
             if (!f)
-                return -1;
+            {
+                result = -1;
+                break;
+            }
 
             int fd = -1;
             for (int i = 0; i < MAX_FDS; i++)
@@ -184,21 +195,27 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             if (fd < 0)
             {
                 vfs_close(f);
-                return -1;
+                result = -1;
+                break;
             }
 
             current_task->fds[fd] = f;
-            return fd;
+            result = fd;
+            break;
         }
 
         case SYS_CLOSE:
         {
             int fd = (int)frame->rdi;
             if (!current_task || fd < 0 || fd >= MAX_FDS || !current_task->fds[fd])
-                return -1;
-            vfs_close(current_task->fds[fd]);
-            current_task->fds[fd] = NULL;
-            return 0;
+                result = -1;
+            else
+            {
+                vfs_close(current_task->fds[fd]);
+                current_task->fds[fd] = NULL;
+                result = 0;
+            }
+            break;
         }
 
         case SYS_READDIR:
@@ -207,7 +224,8 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             uint32_t index = (uint32_t)frame->rsi;
             struct vfs_dentry *entry = (struct vfs_dentry *)frame->rdx;
 
-            return vfs_readdir(path, index, entry);
+            result = vfs_readdir(path, index, entry);
+            break;
         }
 
         case SYS_STAT:
@@ -215,38 +233,50 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             const char *path = (const char *)frame->rdi;
             struct vfs_dentry *entry = (struct vfs_dentry *)frame->rsi;
 
-            return vfs_stat(path, entry);
+            result = vfs_stat(path, entry);
+            break;
         }
 
         case SYS_CLEAR:
             vga_clear(vga_default_color);
             if (fb_available)
                 fb_clear(fb_rgb(0, 0, 0));
-            return 0;
+            result = 0;
+            break;
 
         case SYS_REBOOT:
             serial_write("REBOOT\n");
             outb(0x64, 0xFE);
-            return 0;
-
+            result = 0;
+            break;
 
         case SYS_BRK:
         {
             uint64_t new_brk = frame->rdi;
 
             if (!current_task || current_task->pid == 0)
-                return -1;
+            {
+                result = -1;
+                break;
+            }
 
             if (new_brk == 0)
-                return current_task->brk;
+            {
+                result = current_task->brk;
+                break;
+            }
 
             if (new_brk < USER_HEAP_START)
-                return -1;
+            {
+                result = -1;
+                break;
+            }
 
             if (new_brk < current_task->brk)
             {
                 current_task->brk = new_brk;
-                return current_task->brk;
+                result = current_task->brk;
+                break;
             }
 
             uint64_t start_page = (current_task->brk + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -256,42 +286,59 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             {
                 void *phys = pmm_alloc();
                 if (!phys)
-                    return -1;
+                {
+                    result = -1;
+                    break;
+                }
 
                 if (vmm_map_page(current_task->pml4, virt, (uint64_t)phys, PAGE_USER | PAGE_WRITE) != 0)
                 {
                     pmm_free(phys);
-                    return -1;
+                    result = -1;
+                    break;
                 }
             }
-
-            current_task->brk = new_brk;
-            return current_task->brk;
+            if (result == 0)
+            {
+                current_task->brk = new_brk;
+                result = current_task->brk;
+            }
+            break;
         }
 
         case SYS_GETPID:
-            return task_getpid();
+            result = task_getpid();
+            break;
 
         case SYS_YIELD:
-            return 0;
+        {
+            if (current_task && current_task->pid != 0)
+                current_task->state = TASK_READY;
+            __asm__ volatile("cli");
+            return schedule((uint64_t)frame);
+        }
 
         case SYS_FORK:
-            return task_fork(frame);
+            result = task_fork(frame);
+            break;
 
         case SYS_SPAWN:
         {
             const char *path = (const char *)frame->rdi;
             int argc = (int)frame->rsi;
             char **argv = (char **)frame->rdx;
-            return task_create_user(path, argc, argv);
+            result = task_create_user(path, argc, argv);
+            break;
         }
 
         case SYS_WAITPID:
-            return task_waitpid_nb((int)frame->rdi);
+            result = task_waitpid_nb((int)frame->rdi);
+            break;
 
         case SYS_EXIT:
             task_exit((int)frame->rdi);
-            return 0;
+            result = 0;
+            break;
         
         case SYS_GETCWD:
         {
@@ -299,7 +346,10 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             uint64_t size = frame->rsi;
 
             if (!current_task || current_task->pid == 0 || !user_buf || size == 0)
-                return -1;
+            {
+                result = -1;
+                break;
+            }
 
             uint64_t path_len = 0;
             while (current_task->cwd[path_len] != '\0')
@@ -308,21 +358,28 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             }
 
             if (path_len >= size)
-                return -1;
+            {
+                result = -1;
+                break;
+            }
             
             for (uint64_t i = 0; i <= path_len; i++)
             {
                 user_buf[i] = current_task->cwd[i];
             }
 
-            return 0;
+            result = 0;
+            break;
         }
         case SYS_CHDIR:
         {
             const char *user_path = (const char *)frame->rdi;
 
             if (!current_task || current_task->pid == 0 || !user_path)
-                return -1;
+            {
+                result = -1;
+                break;
+            }
 
             char target_path[256];
             normalize_path(current_task->cwd, user_path, target_path, sizeof(target_path));
@@ -331,7 +388,10 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             int stat_res = vfs_stat(target_path, &entry);
             
             if (stat_res != 0)
-                return -1;
+            {
+                result = -1;
+                break;
+            }
             
             uint64_t i = 0;
             while (target_path[i] != '\0' && i < sizeof(current_task->cwd) - 1)
@@ -341,11 +401,16 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             }
             current_task->cwd[i] = '\0';
 
-            return 0;
+            result = 0;
+            break;
         }
         default:
             serial_printf("syscall: unknown nr %llu from pid=%d\n",
                           (unsigned long long)nr, current_task ? current_task->pid : -1);
-            return -1;
+            result = -1;
+            break;
     }
+
+    frame->rax = result;
+    return (uint64_t)frame;
 }
