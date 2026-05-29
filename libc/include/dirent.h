@@ -13,4 +13,15 @@ struct vfs_dentry {
     uint64_t size;
 };
 
+typedef struct DIR {
+    char *path;
+    int pos;
+    struct vfs_dentry current;
+    int has_next;
+} DIR;
+
+DIR *opendir(const char *path);
+struct vfs_dentry *readdir(DIR *dir);
+int closedir(DIR *dir);
+
 #endif

@@ -693,3 +693,121 @@ uint64_t schedule(uint64_t current_rsp)
 
     return tasks[0].kernel_rsp;
 }
+
+static void free_user_pages(struct task *t)
+{
+    if (!t->pml4) return;
+    uint64_t *pml4 = t->pml4;
+    for (int pml4_idx = 0; pml4_idx < 256; pml4_idx++)
+    {
+        uint64_t pml4e = pml4[pml4_idx];
+        if (!(pml4e & PAGE_PRESENT))
+            continue;
+        uint64_t *pdpt = (uint64_t *)(uintptr_t)(pml4e & ~0xFFFULL);
+        for (int pdpt_idx = 0; pdpt_idx < 512; pdpt_idx++)
+        {
+            uint64_t pdpte = pdpt[pdpt_idx];
+            if (!(pdpte & PAGE_PRESENT))
+                continue;
+            if (pdpte & PAGE_HUGE)
+            {
+                pmm_free((void *)(uintptr_t)(pdpte & ~0xFFFULL));
+                continue;
+            }
+            uint64_t *pd = (uint64_t *)(uintptr_t)(pdpte & ~0xFFFULL);
+            for (int pd_idx = 0; pd_idx < 512; pd_idx++)
+            {
+                uint64_t pde = pd[pd_idx];
+                if (!(pde & PAGE_PRESENT))
+                    continue;
+                if (pde & PAGE_HUGE)
+                {
+                    pmm_free((void *)(uintptr_t)(pde & ~0xFFFULL));
+                    continue;
+                }
+                uint64_t *pt = (uint64_t *)(uintptr_t)(pde & ~0xFFFULL);
+                for (int pt_idx = 0; pt_idx < 512; pt_idx++)
+                {
+                    uint64_t pte = pt[pt_idx];
+                    if (!(pte & PAGE_PRESENT))
+                        continue;
+                    pmm_free((void *)(uintptr_t)(pte & ~0xFFFULL));
+                }
+                pmm_free(pt);
+            }
+            pmm_free(pd);
+        }
+        pmm_free(pdpt);
+    }
+}
+
+int task_exec(const char *path, int argc, char **argv, struct pushaq_frame *frame)
+{
+    if (!current_task || current_task->pid == 0)
+        return -1;
+
+    struct vfs_file *f = vfs_open(path, VFS_O_READ);
+    if (!f)
+    {
+        serial_printf("exec: cannot open '%s'\n", path);
+        return -1;
+    }
+
+    uint64_t *new_pml4 = vmm_create_pml4();
+    if (!new_pml4)
+    {
+        vfs_close(f);
+        return -1;
+    }
+
+    uint64_t entry = elf_load(f, new_pml4);
+    vfs_close(f);
+
+    if (!entry)
+    {
+        serial_printf("exec: elf_load failed for '%s'\n", path);
+        return -1;
+    }
+
+    void *ustack = pmm_alloc();
+    if (!ustack) return -1;
+
+    uint64_t us_vaddr = USER_BASE_VADDR + 0x1000000000ULL;
+
+    uint64_t user_rsp;
+    setup_user_stack((char *)ustack, us_vaddr, argc, argv, &user_rsp);
+
+    if (vmm_map_page(new_pml4, us_vaddr - 0x1000, (uint64_t)ustack, PAGE_USER | PAGE_WRITE) != 0)
+    {
+        pmm_free(ustack);
+        return -1;
+    }
+
+    free_user_pages(current_task);
+
+    if (current_task->ustack_page)
+    {
+        pmm_free(current_task->ustack_page);
+        current_task->ustack_page = NULL;
+    }
+    if (current_task->pml4)
+    {
+        pmm_free(current_task->pml4);
+    }
+
+    current_task->pml4 = new_pml4;
+    current_task->ustack_page = ustack;
+    current_task->brk = USER_HEAP_START;
+
+    vmm_load_pml4(new_pml4);
+
+    frame->rax = 0;
+    frame->iretq.rip = entry;
+    frame->iretq.rsp = user_rsp;
+    frame->iretq.cs  = GDT_UCODE | 3;
+    frame->iretq.ss  = GDT_UDATA | 3;
+    frame->iretq.rflags = 0x202;
+
+    serial_printf("exec: pid=%d entry=%p\n", current_task->pid, (void*)entry);
+    return 0;
+}

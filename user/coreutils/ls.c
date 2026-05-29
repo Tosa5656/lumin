@@ -31,7 +31,7 @@ int main(int argc, char **argv)
 
     struct vfs_dentry entry;
 
-    for (unsigned int i = 0; readdir(path, i, &entry) == 0; i++)
+    for (unsigned int i = 0; __readdir(path, i, &entry) == 0; i++)
     {
         printf("%s  ", entry.name);
     }

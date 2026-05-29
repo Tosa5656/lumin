@@ -6,6 +6,7 @@ extern main
 extern exit
 
 _start:
+    and rsp, -16
     mov rdi, [rsp]
     lea rsi, [rsp + 8]
     call main

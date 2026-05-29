@@ -17,4 +17,18 @@ int pipe(int pipefd[2]);
 int dup(int oldfd);
 int dup2(int oldfd, int newfd);
 
+void _exit(int code);
+unsigned int sleep(unsigned int seconds);
+int usleep(unsigned long usec);
+int execve(const char *path, char **argv, char **envp);
+int execv(const char *path, char **argv);
+int rmdir(const char *path);
+int unlink(const char *path);
+long lseek(int fd, long offset, int whence);
+int isatty(int fd);
+
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
 #endif

@@ -20,4 +20,12 @@ char *strdup(const char *s);
 char *strtok(char *str, const char *delim);
 char *strtok_r(char *str, const char *delim, char **saveptr);
 
+int strcasecmp(const char *a, const char *b);
+int strncasecmp(const char *a, const char *b, unsigned long n);
+char *strpbrk(const char *s, const char *accept);
+unsigned long strspn(const char *s, const char *accept);
+unsigned long strcspn(const char *s, const char *reject);
+char *strncat(char *dst, const char *src, unsigned long n);
+char *strerror(int errnum);
+
 #endif

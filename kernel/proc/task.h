@@ -61,6 +61,7 @@ uint64_t schedule(uint64_t current_rsp);
 int  task_kill(int pid, int sig);
 int  task_sigaction(int sig, const struct sigaction *act, struct sigaction *oldact);
 void task_check_signals(void);
+int  task_exec(const char *path, int argc, char **argv, struct pushaq_frame *frame);
 
 extern struct task *current_task;
 

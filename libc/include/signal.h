@@ -57,5 +57,12 @@ struct sigaction {
 
 int kill(int pid, int sig);
 int sigaction(int sig, const struct sigaction *act, struct sigaction *oldact);
+void (*signal(int sig, void (*handler)(int)))(int);
+
+#define sigemptyset(set)   (*(set) = 0ULL)
+#define sigfillset(set)    (*(set) = ~0ULL)
+#define sigaddset(set, n)  (*(set) |= (1ULL << ((n) - 1)))
+#define sigdelset(set, n)  (*(set) &= ~(1ULL << ((n) - 1)))
+#define sigismember(set, n) (!!(*(set) & (1ULL << ((n) - 1))))
 
 #endif

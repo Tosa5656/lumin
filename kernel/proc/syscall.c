@@ -7,6 +7,7 @@
 #include "../drivers/fb/fb.h"
 #include "../fs/vfs.h"
 #include "../fs/pipefs.h"
+#include "../fs/stat.h"
 #include "../ports.h"
 #include "keyboard.h"
 
@@ -24,6 +25,11 @@
 #define SYS_KILL     11
 #define SYS_SIGACTION 12
 #define SYS_SIGRETURN 13
+#define SYS_LSEEK    14
+#define SYS_UNLINK   15
+#define SYS_MKDIR    16
+#define SYS_RMDIR    17
+#define SYS_EXEC     18
 #define SYS_YIELD    24
 #define SYS_GETPID   39
 #define SYS_BRK      45
@@ -238,9 +244,27 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
         case SYS_STAT:
         {
             const char *path = (const char *)frame->rdi;
-            struct vfs_dentry *entry = (struct vfs_dentry *)frame->rsi;
+            struct stat *st = (struct stat *)frame->rsi;
 
-            result = vfs_stat(path, entry);
+            struct vfs_dentry entry;
+            int r = vfs_stat(path, &entry);
+            if (r != 0)
+            {
+                result = -1;
+                break;
+            }
+
+            st->st_dev     = 0;
+            st->st_ino     = entry.ino;
+            st->st_nlink   = 1;
+            st->st_mode    = (entry.type == VFS_DIR ? S_IFDIR : S_IFREG) | 0777;
+            st->st_uid     = 0;
+            st->st_gid     = 0;
+            st->st_rdev    = 0;
+            st->st_size    = entry.size;
+            st->st_blksize = 512;
+            st->st_blocks  = (entry.size + 511) / 512;
+            result = 0;
             break;
         }
 
@@ -256,6 +280,131 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             outb(0x64, 0xFE);
             result = 0;
             break;
+
+        case SYS_LSEEK:
+        {
+            int fd = (int)frame->rdi;
+            long offset = (long)frame->rsi;
+            int whence = (int)frame->rdx;
+
+            if (!current_task || fd < 0 || fd >= MAX_FDS || !current_task->fds[fd])
+            {
+                result = -1;
+                break;
+            }
+
+            struct vfs_file *f = current_task->fds[fd];
+            switch (whence)
+            {
+                case 0: f->offset = offset; break;
+                case 1: f->offset += offset; break;
+                case 2:
+                {
+                    if (!f->inode)
+                    {
+                        result = -1;
+                        break;
+                    }
+                    f->offset = f->inode->size + offset;
+                    break;
+                }
+                default: result = -1; break;
+            }
+            result = 0;
+            break;
+        }
+
+        case SYS_UNLINK:
+        {
+            const char *path = (const char *)frame->rdi;
+
+            if (!current_task || current_task->pid == 0)
+            {
+                result = -1;
+                break;
+            }
+
+            char full_path[256];
+            normalize_path(current_task->cwd, path, full_path, sizeof(full_path));
+
+            if (vfs_unlink(full_path) != 0)
+                result = -1;
+            else
+                result = 0;
+            break;
+        }
+
+        case SYS_MKDIR:
+        {
+            const char *path = (const char *)frame->rdi;
+
+            if (!current_task || current_task->pid == 0)
+            {
+                result = -1;
+                break;
+            }
+
+            char full_path[256];
+            normalize_path(current_task->cwd, path, full_path, sizeof(full_path));
+
+            if (vfs_mkdir(full_path) != 0)
+                result = -1;
+            else
+                result = 0;
+            break;
+        }
+
+        case SYS_RMDIR:
+        {
+            const char *path = (const char *)frame->rdi;
+
+            if (!current_task || current_task->pid == 0)
+            {
+                result = -1;
+                break;
+            }
+
+            char full_path[256];
+            normalize_path(current_task->cwd, path, full_path, sizeof(full_path));
+
+            struct vfs_dentry entry;
+            if (vfs_stat(full_path, &entry) != 0 || entry.type != VFS_DIR)
+            {
+                result = -1;
+                break;
+            }
+
+            if (vfs_unlink(full_path) != 0)
+                result = -1;
+            else
+                result = 0;
+            break;
+        }
+
+        case SYS_EXEC:
+        {
+            const char *path = (const char *)frame->rdi;
+            int argc = (int)frame->rsi;
+            char **argv = (char **)frame->rdx;
+
+            if (!current_task || current_task->pid == 0 || !path)
+            {
+                result = -1;
+                break;
+            }
+
+            char full_path[256];
+            normalize_path(current_task->cwd, path, full_path, sizeof(full_path));
+
+            int r = task_exec(full_path, argc, argv, frame);
+            if (r != 0)
+            {
+                result = -1;
+                break;
+            }
+
+            return (uint64_t)frame;
+        }
 
         case SYS_BRK:
         {

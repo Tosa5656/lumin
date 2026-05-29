@@ -185,13 +185,13 @@ static void stdout_putchar(char c, void *ctx)
 {
     (void)ctx;
     unsigned char ch = (unsigned char)c;
-    syscall(SYS_write, 1, (long)&ch, 1);
+    __syscall(SYS_write, 1, (long)&ch, 1);
 }
 
 int putchar(int c)
 {
     unsigned char ch = (unsigned char)c;
-    syscall(SYS_write, 1, (long)&ch, 1);
+    __syscall(SYS_write, 1, (long)&ch, 1);
     return (unsigned char)c;
 }
 

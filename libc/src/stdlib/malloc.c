@@ -102,6 +102,13 @@ void free(void *ptr)
 
 void *calloc(unsigned long nmemb, unsigned long size)
 {
+    if (nmemb == 0 || size == 0)
+        return NULL;
+    if (nmemb > (unsigned long)-1 / size)
+    {
+        errno = ENOMEM;
+        return NULL;
+    }
     unsigned long total = nmemb * size;
     void *ptr = malloc(total);
     if (ptr)
