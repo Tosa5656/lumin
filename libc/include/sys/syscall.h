@@ -22,6 +22,7 @@
 #define SYS_mkdir   16
 #define SYS_rmdir   17
 #define SYS_exec    18
+#define SYS_nanosleep 35
 #define SYS_yield   24
 #define SYS_getpid  39
 #define SYS_brk     45

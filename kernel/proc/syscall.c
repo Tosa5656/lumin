@@ -3,6 +3,7 @@
 #include "../mm/vmm.h"
 #include "../mm/pmm.h"
 #include "../drivers/serial/serial.h"
+#include "../drivers/timer/timer.h"
 #include "../drivers/vga/vga.h"
 #include "../drivers/fb/fb.h"
 #include "../fs/vfs.h"
@@ -26,6 +27,7 @@
 #define SYS_SIGACTION 12
 #define SYS_SIGRETURN 13
 #define SYS_LSEEK    14
+#define SYS_NANOSLEEP 35
 #define SYS_UNLINK   15
 #define SYS_MKDIR    16
 #define SYS_RMDIR    17
@@ -40,6 +42,20 @@
 #define SYS_GETCWD   79
 #define SYS_CHDIR    80
 
+
+static int strncpy_from_user(char *dst, const char *src, uint64_t max)
+{
+    if (!dst || !src || max == 0)
+        return -1;
+    for (uint64_t i = 0; i < max; i++)
+    {
+        dst[i] = src[i];
+        if (src[i] == '\0')
+            return (int)i;
+    }
+    dst[max - 1] = '\0';
+    return (int)max - 1;
+}
 
 static void normalize_path(const char *cwd, const char *input, char *output, uint64_t max_len)
 {
@@ -180,7 +196,12 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
         case SYS_OPEN:
         {
-            const char *path = (const char *)frame->rdi;
+            char path_buf[256];
+            if (strncpy_from_user(path_buf, (const char *)frame->rdi, sizeof(path_buf)) < 0)
+            {
+                result = -1;
+                break;
+            }
             int flags = (int)frame->rsi;
 
             if (!current_task || current_task->pid == 0)
@@ -189,7 +210,7 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
                 break;
             }
 
-            struct vfs_file *f = vfs_open(path, flags);
+            struct vfs_file *f = vfs_open(path_buf, flags);
             if (!f)
             {
                 result = -1;
@@ -233,21 +254,31 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
         case SYS_READDIR:
         {
-            const char *path = (const char *)frame->rdi;
+            char path_buf[256];
+            if (strncpy_from_user(path_buf, (const char *)frame->rdi, sizeof(path_buf)) < 0)
+            {
+                result = -1;
+                break;
+            }
             uint32_t index = (uint32_t)frame->rsi;
             struct vfs_dentry *entry = (struct vfs_dentry *)frame->rdx;
 
-            result = vfs_readdir(path, index, entry);
+            result = vfs_readdir(path_buf, index, entry);
             break;
         }
 
         case SYS_STAT:
         {
-            const char *path = (const char *)frame->rdi;
+            char path_buf[256];
+            if (strncpy_from_user(path_buf, (const char *)frame->rdi, sizeof(path_buf)) < 0)
+            {
+                result = -1;
+                break;
+            }
             struct stat *st = (struct stat *)frame->rsi;
 
             struct vfs_dentry entry;
-            int r = vfs_stat(path, &entry);
+            int r = vfs_stat(path_buf, &entry);
             if (r != 0)
             {
                 result = -1;
@@ -316,7 +347,12 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
         case SYS_UNLINK:
         {
-            const char *path = (const char *)frame->rdi;
+            char path_buf[256];
+            if (strncpy_from_user(path_buf, (const char *)frame->rdi, sizeof(path_buf)) < 0)
+            {
+                result = -1;
+                break;
+            }
 
             if (!current_task || current_task->pid == 0)
             {
@@ -325,7 +361,7 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             }
 
             char full_path[256];
-            normalize_path(current_task->cwd, path, full_path, sizeof(full_path));
+            normalize_path(current_task->cwd, path_buf, full_path, sizeof(full_path));
 
             if (vfs_unlink(full_path) != 0)
                 result = -1;
@@ -336,7 +372,12 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
         case SYS_MKDIR:
         {
-            const char *path = (const char *)frame->rdi;
+            char path_buf[256];
+            if (strncpy_from_user(path_buf, (const char *)frame->rdi, sizeof(path_buf)) < 0)
+            {
+                result = -1;
+                break;
+            }
 
             if (!current_task || current_task->pid == 0)
             {
@@ -345,7 +386,7 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             }
 
             char full_path[256];
-            normalize_path(current_task->cwd, path, full_path, sizeof(full_path));
+            normalize_path(current_task->cwd, path_buf, full_path, sizeof(full_path));
 
             if (vfs_mkdir(full_path) != 0)
                 result = -1;
@@ -356,7 +397,12 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
         case SYS_RMDIR:
         {
-            const char *path = (const char *)frame->rdi;
+            char path_buf[256];
+            if (strncpy_from_user(path_buf, (const char *)frame->rdi, sizeof(path_buf)) < 0)
+            {
+                result = -1;
+                break;
+            }
 
             if (!current_task || current_task->pid == 0)
             {
@@ -365,7 +411,7 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             }
 
             char full_path[256];
-            normalize_path(current_task->cwd, path, full_path, sizeof(full_path));
+            normalize_path(current_task->cwd, path_buf, full_path, sizeof(full_path));
 
             struct vfs_dentry entry;
             if (vfs_stat(full_path, &entry) != 0 || entry.type != VFS_DIR)
@@ -383,18 +429,23 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
         case SYS_EXEC:
         {
-            const char *path = (const char *)frame->rdi;
+            char path_buf[256];
+            if (strncpy_from_user(path_buf, (const char *)frame->rdi, sizeof(path_buf)) < 0)
+            {
+                result = -1;
+                break;
+            }
             int argc = (int)frame->rsi;
             char **argv = (char **)frame->rdx;
 
-            if (!current_task || current_task->pid == 0 || !path)
+            if (!current_task || current_task->pid == 0)
             {
                 result = -1;
                 break;
             }
 
             char full_path[256];
-            normalize_path(current_task->cwd, path, full_path, sizeof(full_path));
+            normalize_path(current_task->cwd, path_buf, full_path, sizeof(full_path));
 
             int r = task_exec(full_path, argc, argv, frame);
             if (r != 0)
@@ -404,6 +455,28 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             }
 
             return (uint64_t)frame;
+        }
+
+        case SYS_NANOSLEEP:
+        {
+            struct sleep_time {
+                unsigned long tv_sec;
+                unsigned long tv_nsec;
+            } *ts = (struct sleep_time *)frame->rdi;
+
+            if (!ts)
+            {
+                result = -1;
+                break;
+            }
+
+            uint64_t total_ms = ts->tv_sec * 1000UL + ts->tv_nsec / 1000000UL;
+            uint64_t leftover_ns = ts->tv_nsec % 1000000UL;
+            if (leftover_ns > 0 && total_ms == 0)
+                total_ms = 1;
+            timer_sleep((uint32_t)total_ms);
+            result = 0;
+            break;
         }
 
         case SYS_BRK:
@@ -480,10 +553,15 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
         case SYS_SPAWN:
         {
-            const char *path = (const char *)frame->rdi;
+            char path_buf[256];
+            if (strncpy_from_user(path_buf, (const char *)frame->rdi, sizeof(path_buf)) < 0)
+            {
+                result = -1;
+                break;
+            }
             int argc = (int)frame->rsi;
             char **argv = (char **)frame->rdx;
-            result = task_create_user(path, argc, argv);
+            result = task_create_user(path_buf, argc, argv);
             break;
         }
 
@@ -529,9 +607,14 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
         }
         case SYS_CHDIR:
         {
-            const char *user_path = (const char *)frame->rdi;
+            char user_path[256];
+            if (strncpy_from_user(user_path, (const char *)frame->rdi, sizeof(user_path)) < 0)
+            {
+                result = -1;
+                break;
+            }
 
-            if (!current_task || current_task->pid == 0 || !user_path)
+            if (!current_task || current_task->pid == 0)
             {
                 result = -1;
                 break;

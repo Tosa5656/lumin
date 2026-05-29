@@ -1,5 +1,6 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <errno.h>
 #include <stddef.h>
 
 int stat(const char *path, struct stat *buf)
@@ -11,6 +12,7 @@ int fstat(int fd, struct stat *buf)
 {
     (void)fd;
     (void)buf;
+    errno = ENOSYS;
     return -1;
 }
 
@@ -24,5 +26,6 @@ int chmod(const char *path, int mode)
 {
     (void)path;
     (void)mode;
+    errno = ENOSYS;
     return -1;
 }

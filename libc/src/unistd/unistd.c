@@ -86,15 +86,22 @@ unsigned int sleep(unsigned int seconds)
 
 int usleep(unsigned long usec)
 {
-    (void)usec;
-    sched_yield();
-    return 0;
+    struct {
+        unsigned long tv_sec;
+        unsigned long tv_nsec;
+    } ts;
+    ts.tv_sec  = usec / 1000000UL;
+    ts.tv_nsec = (usec % 1000000UL) * 1000UL;
+    return (int)__sysret(__syscall(SYS_nanosleep, (long)&ts, 0, 0));
 }
 
 int execve(const char *path, char **argv, char **envp)
 {
     (void)envp;
-    return (int)__sysret(__syscall(SYS_exec, (long)path, (long)(argv ? 0 : 0), (long)argv));
+    int argc = 0;
+    if (argv)
+        while (argv[argc]) argc++;
+    return (int)__sysret(__syscall(SYS_exec, (long)path, (long)argc, (long)argv));
 }
 
 int execv(const char *path, char **argv)

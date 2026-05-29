@@ -2,9 +2,23 @@
 #include <sys/syscall.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 DIR *opendir(const char *path)
 {
+    if (!path)
+    {
+        errno = ENOENT;
+        return NULL;
+    }
+
+    struct vfs_dentry tmp;
+    if (__readdir(path, 0, &tmp) != 0)
+    {
+        errno = ENOENT;
+        return NULL;
+    }
+
     DIR *dir = (DIR *)malloc(sizeof(DIR) + strlen(path) + 1);
     if (!dir) return NULL;
 
