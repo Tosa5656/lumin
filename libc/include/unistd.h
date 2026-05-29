@@ -26,6 +26,7 @@ int rmdir(const char *path);
 int unlink(const char *path);
 long lseek(int fd, long offset, int whence);
 int isatty(int fd);
+int shutdown(void);
 
 #define SEEK_SET 0
 #define SEEK_CUR 1

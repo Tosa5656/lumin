@@ -5,7 +5,7 @@ CC = x86_64-pc-linux-gnu-gcc
 LD = x86_64-pc-linux-gnu-gcc
 CFLAGS = -m64 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -mno-red-zone -I kernel -I os
 LDFLAGS = -m64 -nostdlib -Wl,-T,kernel/kernel.ld,--oformat,binary
-KERNEL_SECTORS = 216
+KERNEL_SECTORS = 228
 KERNEL_MAX = $$(( $(KERNEL_SECTORS) * 512 - $(STAGE2_SIZE) ))
 TRUNCATE = truncate
 CAT = cat
@@ -26,6 +26,8 @@ $(AUTOCONF): .config
 CFLAGS += -include $(AUTOCONF)
 endif
 
+SBIN_ELFS = user/sbin/init.elf
+
 menuconfig:
 	python3 tools/kconfig/genconfig.py menuconfig
 	$(MAKE) $(AUTOCONF)
@@ -43,7 +45,7 @@ clean-config:
 distclean: clean clean-config
 
 mkdirs:
-	mkdir -p bin obj kernel/include/generated
+	mkdir -p bin obj kernel/include/generated user/sbin
 
 bin/stage2.bin: arch/x86_64/stage2.asm
 	${AS} -f bin $< -o $@
@@ -116,6 +118,8 @@ obj/fb.o: kernel/drivers/fb/fb.c kernel/drivers/fb/fb.h kernel/drivers/fb/fb_fon
 	${CC} ${CFLAGS} -c $< -o $@
 obj/ata.o: kernel/drivers/ata/ata.c
 	${CC} ${CFLAGS} -c $< -o $@
+obj/ahci.o: kernel/drivers/ata/ahci.c
+	${CC} ${CFLAGS} -c $< -o $@
 obj/block.o: kernel/block/block.c
 	${CC} ${CFLAGS} -c $< -o $@
 obj/vfs.o: kernel/fs/vfs.c
@@ -170,6 +174,9 @@ endif
 ifeq ($(CONFIG_ATA),y)
 OBJS_ATA = obj/ata.o
 endif
+ifeq ($(CONFIG_AHCI),y)
+OBJS_AHCI = obj/ahci.o
+endif
 ifeq ($(CONFIG_BLOCK),y)
 OBJS_BLOCK = obj/block.o
 endif
@@ -195,6 +202,7 @@ ifeq (,$(wildcard .config))
     CONFIG_PCI      := y
     CONFIG_FB       := y
     CONFIG_ATA      := y
+    CONFIG_AHCI     := y
     CONFIG_BLOCK    := y
     CONFIG_VFS      := y
     CONFIG_FAT32    := y
@@ -207,7 +215,7 @@ OBJS = $(CORE_OBJS) \
        $(OBJS_ELF) $(OBJS_TASK) $(OBJS_SYSCALL) \
        $(OBJS_KEYBOARD) $(OBJS_VGA) $(OBJS_SERIAL) $(OBJS_RTC) \
        $(OBJS_TIMER) obj/pit.o obj/hpet.o obj/lapic.o \
-       $(OBJS_PCI) $(OBJS_FB) $(OBJS_ATA) \
+        $(OBJS_PCI) $(OBJS_FB) $(OBJS_ATA) $(OBJS_AHCI) \
        $(OBJS_BLOCK) $(OBJS_VFS) $(OBJS_FAT32) \
        obj/initcall.o obj/smp.o obj/pipefs.o obj/device.o obj/procfs.o obj/tmpfs.o
 
@@ -233,14 +241,18 @@ ifeq (,$(wildcard .config))
     CONFIG_AS        := y
     CONFIG_ECC       := y
     CONFIG_COREUTILS := y
+    CONFIG_SBIN      := y
 endif
 
 USER_ELFS = $(and $(CONFIG_HELLO),user/hello.elf) \
             $(and $(CONFIG_SHELL),user/shell.elf) \
-            $(and $(CONFIG_COREUTILS),$(CORETIL_ELFS))
+            $(and $(CONFIG_COREUTILS),$(CORETIL_ELFS)) \
+            $(and $(CONFIG_SBIN),$(SBIN_ELFS))
 
-CORETILS = ls cat echo clear help
+CORETILS = ls cat echo clear help ed cp mv rm
 CORETIL_ELFS = $(addprefix user/coreutils/,$(addsuffix .elf,$(CORETILS)))
+
+SBIN_ELFS = user/sbin/init.elf
 
 ifeq ($(CONFIG_HELLO),y)
 user/hello.elf: user/hello.c $(LIBC)
@@ -260,15 +272,28 @@ user/coreutils/%.elf: user/coreutils/%.c $(LIBC)
 	chmod -x $@
 endif
 
+ifeq ($(CONFIG_SBIN),y)
+user/sbin/%.elf: user/sbin/%.c $(LIBC)
+	${USER_CC} ${USER_CFLAGS} ${USER_LDFLAGS} -o $@ $(LIBC_CRT0) $< -L libc -lc
+	chmod -x $@
+endif
+
 ALL_ELFS = $(USER_ELFS)
+
+SYS_BIN_ELFS = $(filter-out user/sbin/%,$(ALL_ELFS))
+SYS_SBIN_ELFS = $(filter user/sbin/%,$(ALL_ELFS))
 
 fat32.img: $(ALL_ELFS)
 	dd if=/dev/zero of=fat32.img bs=1M count=32
 	mkfs.fat -F 32 fat32.img
 	mmd -i fat32.img ::/system
 	mmd -i fat32.img ::/system/bin
-	for f in $(ALL_ELFS); do \
+	mmd -i fat32.img ::/system/sbin
+	for f in $(SYS_BIN_ELFS); do \
 		mcopy -i fat32.img $$f ::/system/bin/$$(basename $$f); \
+	done
+	for f in $(SYS_SBIN_ELFS); do \
+		mcopy -i fat32.img $$f ::/system/sbin/$$(basename $$f); \
 	done
 
 qemu: kernel fat32.img

@@ -32,6 +32,8 @@
 #define SYS_waitpid 61
 #define SYS_getcwd  79
 #define SYS_chdir   80
+#define SYS_shutdown 0x7F
+#define SYS_clock_gettime 0x80
 
 struct stat;
 struct vfs_dentry;

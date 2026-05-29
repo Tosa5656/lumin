@@ -4,6 +4,7 @@
 #include "../mm/pmm.h"
 #include "../drivers/serial/serial.h"
 #include "../drivers/timer/timer.h"
+#include "../drivers/rtc/rtc.h"
 #include "../drivers/vga/vga.h"
 #include "../drivers/fb/fb.h"
 #include "../fs/vfs.h"
@@ -41,6 +42,8 @@
 #define SYS_WAITPID  61
 #define SYS_GETCWD   79
 #define SYS_CHDIR    80
+#define SYS_SHUTDOWN 0x7F
+#define SYS_CLOCK_GETTIME 0x80
 
 
 static int strncpy_from_user(char *dst, const char *src, uint64_t max)
@@ -202,7 +205,15 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
                 result = -1;
                 break;
             }
-            int flags = (int)frame->rsi;
+            int user_flags = (int)frame->rsi;
+            int vfs_flags = 0;
+            switch (user_flags & 3)
+            {
+                case 0: vfs_flags = VFS_O_READ; break;
+                case 1: vfs_flags = VFS_O_WRITE; break;
+                case 2: vfs_flags = VFS_O_READ | VFS_O_WRITE; break;
+            }
+            if (user_flags & 0x40) vfs_flags |= VFS_O_CREAT;
 
             if (!current_task || current_task->pid == 0)
             {
@@ -210,7 +221,7 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
                 break;
             }
 
-            struct vfs_file *f = vfs_open(path_buf, flags);
+            struct vfs_file *f = vfs_open(path_buf, vfs_flags);
             if (!f)
             {
                 result = -1;
@@ -728,6 +739,39 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
         case SYS_SIGRETURN:
         {
+            result = 0;
+            break;
+        }
+
+        case SYS_SHUTDOWN:
+        {
+            serial_write("SHUTDOWN\n");
+            outw(0x604, 0x2000);
+            outw(0xB004, 0x2000);
+            outw(0x4004, 0x3400);
+            for (;;) __asm__("cli; hlt");
+            break;
+        }
+
+        case SYS_CLOCK_GETTIME:
+        {
+            struct clk_time {
+                unsigned long tv_sec;
+                unsigned long tv_nsec;
+            } *tp = (struct clk_time *)frame->rdi;
+
+            if (!tp)
+            {
+                result = -1;
+                break;
+            }
+
+            struct rtc_time tm;
+            rtc_read(&tm);
+            tp->tv_sec  = tm.year * 31536000UL + tm.month * 2592000UL +
+                          tm.day * 86400UL + tm.hour * 3600UL +
+                          tm.minute * 60UL + tm.second;
+            tp->tv_nsec = 0;
             result = 0;
             break;
         }

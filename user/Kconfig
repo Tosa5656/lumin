@@ -18,6 +18,12 @@ config COREUTILS
 	bool "Core utilities"
 	default y
 	help
-	  Build ls, cat, echo, clear, help utilities.
+	  Build ls, cat, echo, clear, help, ed, cp, mv, rm utilities.
+
+config SBIN
+	bool "System binaries"
+	default y
+	help
+	  Build init.elf and other system programs that live in /system/sbin/.
 
 endmenu

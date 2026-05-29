@@ -13,9 +13,11 @@
 #define CONFIG_KEYBOARD 1
 #define CONFIG_PCI 1
 #define CONFIG_ATA 1
+#define CONFIG_AHCI 1
 #define CONFIG_ACPI 1
 #define CONFIG_RTC 1
 #define CONFIG_TIMER_HPET 1
 #define CONFIG_SHELL 1
 #define CONFIG_HELLO 1
 #define CONFIG_COREUTILS 1
+#define CONFIG_SBIN 1

@@ -37,6 +37,13 @@ config ATA
 	help
 	  Parallel ATA disk driver.
 
+config AHCI
+	bool "AHCI (SATA)"
+	default y
+	depends on PCI
+	help
+	  Serial ATA AHCI driver for SATA controllers.
+
 config ACPI
 	bool "ACPI"
 	default y

@@ -418,7 +418,7 @@ static int tokenize(char *line, char **argv, int max)
 
 static int run_cmd(int argc, char **argv)
 {
-    if (argc == 0 || argv[0] == '\0')
+    if (argc == 0 || argv[0] == NULL || argv[0][0] == '\0')
     {
         return 0;
     }
@@ -458,6 +458,13 @@ static int run_cmd(int argc, char **argv)
         return 0;
     }
 
+    if (strcmp(argv[0], "shutdown") == 0)
+    {
+        write(1, "shutting down...\n", 17);
+        shutdown();
+        return 0;
+    }
+
     if (strcmp(argv[0], "export") == 0)
     {
         if (argc < 2)
@@ -468,6 +475,95 @@ static int run_cmd(int argc, char **argv)
         {
             write(1, "export: environment variables not supported yet\n", 48);
         }
+        return 0;
+    }
+
+    int pipe_pos = -1;
+    for (int i = 0; i < argc; i++)
+    {
+        if (strcmp(argv[i], "|") == 0)
+        {
+            pipe_pos = i;
+            break;
+        }
+    }
+
+    if (pipe_pos >= 0)
+    {
+        argv[pipe_pos] = NULL;
+        int left_argc = pipe_pos;
+        int right_argc = argc - pipe_pos - 1;
+        char **right_argv = argv + pipe_pos + 1;
+
+        int pfd[2];
+        if (pipe(pfd) < 0)
+        {
+            write(1, "shell: pipe failed\n", 19);
+            return -1;
+        }
+
+        int pid1 = fork();
+        if (pid1 < 0)
+        {
+            write(1, "shell: fork failed\n", 19);
+            close(pfd[0]);
+            close(pfd[1]);
+            return -1;
+        }
+
+        if (pid1 == 0)
+        {
+            close(pfd[0]);
+            dup2(pfd[1], 1);
+            close(pfd[1]);
+
+            char buf[256];
+            strcpy(buf, "/system/bin/");
+            strcat(buf, argv[0]);
+            strcat(buf, ".elf");
+            int p = spawn(buf, left_argc, argv);
+            if (p < 0)
+            {
+                write(1, "shell: command not found\n", 25);
+                syscall(SYS_exit, 1, 0, 0);
+            }
+            waitpid(p);
+            syscall(SYS_exit, 0, 0, 0);
+        }
+
+        int pid2 = fork();
+        if (pid2 < 0)
+        {
+            write(1, "shell: fork failed\n", 19);
+            close(pfd[0]);
+            close(pfd[1]);
+            return -1;
+        }
+
+        if (pid2 == 0)
+        {
+            close(pfd[1]);
+            dup2(pfd[0], 0);
+            close(pfd[0]);
+
+            char buf[256];
+            strcpy(buf, "/system/bin/");
+            strcat(buf, right_argv[0]);
+            strcat(buf, ".elf");
+            int p = spawn(buf, right_argc, right_argv);
+            if (p < 0)
+            {
+                write(1, "shell: command not found\n", 25);
+                syscall(SYS_exit, 1, 0, 0);
+            }
+            waitpid(p);
+            syscall(SYS_exit, 0, 0, 0);
+        }
+
+        close(pfd[0]);
+        close(pfd[1]);
+        waitpid(pid1);
+        waitpid(pid2);
         return 0;
     }
 

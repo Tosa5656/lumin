@@ -12,6 +12,7 @@
 #include "proc/elf.h"
 #include "drivers/pci/pci.h"
 #include "drivers/ata/ata.h"
+#include "drivers/ata/ahci.h"
 #include "block/block.h"
 #include "fs/vfs.h"
 #include "fs/fat32.h"
@@ -36,15 +37,15 @@ static const char *timer_name(enum timer_type t)
 
 static void run_init(void)
 {
-    serial_write("init: starting shell.elf...\n");
-    int pid = task_create_user("/system/bin/shell.elf", 0, NULL);
+    serial_write("init: starting init.elf...\n");
+    int pid = task_create_user("/system/sbin/init.elf", 0, NULL);
     if (pid < 0)
     {
-        serial_write("init: failed to create shell task\n");
+        serial_write("init: failed to create init task\n");
         return;
     }
 
-    serial_write("init: tasks created, switching to userspace...\n");
+    serial_write("init: task created, switching to userspace...\n");
 
     __asm__("sti");
 
@@ -126,6 +127,7 @@ void kmain(void)
     block_init();
 
     int ata_count = ata_init();
+    ahci_init();
     serial_printf("block: %d device(s) total\n", block_count());
     fb_printf("block: %d device(s)\n", block_count());
 

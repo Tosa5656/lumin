@@ -9,7 +9,7 @@ LIBC_OBJS = obj/errno/errno.o obj/stdlib/exit.o obj/stdlib/malloc.o \
             obj/string/mem.o obj/string/str.o obj/stdio/printf.o \
             obj/stdio/file.o obj/stdio/fget.o obj/stdio/fput.o obj/stdio/scanf.o \
             obj/unistd/unistd.o obj/signal/signal.o obj/dirent/dirent.o \
-            obj/stat.o obj/wait.o
+            obj/stat.o obj/wait.o obj/time.o
 
 all: libc.a
 
@@ -74,6 +74,9 @@ obj/stat.o: src/stat.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 obj/wait.o: src/wait.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+obj/time.o: src/time.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 libc.a: mkdirs $(CRT_OBJ) $(LIBC_OBJS)

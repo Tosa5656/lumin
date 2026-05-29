@@ -70,6 +70,7 @@ struct vfs_file {
 
 #define VFS_O_READ  1
 #define VFS_O_WRITE 2
+#define VFS_O_CREAT 4
 
 int  vfs_init(void);
 int  vfs_mount(const char *path, struct vfs_superblock *sb);

@@ -128,3 +128,9 @@ int isatty(int fd)
 {
     return fd >= 0 && fd <= 2;
 }
+
+int shutdown(void)
+{
+    __syscall(SYS_shutdown, 0, 0, 0);
+    return 0;
+}

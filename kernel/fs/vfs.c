@@ -174,7 +174,17 @@ struct vfs_file *vfs_open(const char *path, int flags)
 
     struct vfs_inode *inode = NULL;
     if (resolve_full(path, &inode) != 0)
-        return NULL;
+    {
+        if ((flags & VFS_O_CREAT) && vfs_create(path) == 0)
+        {
+            if (resolve_full(path, &inode) != 0)
+                return NULL;
+        }
+        else
+        {
+            return NULL;
+        }
+    }
 
     int idx = -1;
     for (int i = 0; i < VFS_FILE_MAX; i++)

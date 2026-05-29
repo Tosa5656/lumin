@@ -127,7 +127,7 @@ init_pm:
 
     mov esi, 0x8000 + STAGE2_SIZE
     mov edi, 0x100000
-    mov ecx, (216 * 512 - STAGE2_SIZE) / 4
+    mov ecx, (228 * 512 - STAGE2_SIZE) / 4
     rep movsd
 
 
