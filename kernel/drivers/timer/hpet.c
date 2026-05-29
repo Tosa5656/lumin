@@ -113,4 +113,3 @@ int hpet_init(uint32_t hz)
     outb(0x21, 0xFC);
     return 0;
 }
-

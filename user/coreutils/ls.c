@@ -25,17 +25,17 @@ int main(int argc, char **argv)
         }
         else
         {
-            path = "/"; 
+            path = "/";
         }
     }
 
     struct vfs_dentry entry;
-    
+
     for (unsigned int i = 0; readdir(path, i, &entry) == 0; i++)
     {
         printf("%s  ", entry.name);
     }
     printf("\n");
-    
+
     return 0;
 }

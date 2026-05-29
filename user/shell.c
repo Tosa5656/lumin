@@ -94,7 +94,7 @@ static int readline(char *buf, int max)
         {
             switch (c)
             {
-                case 0x80: /* KEY_UP */
+                case 0x80:
                 {
                     if (hist_count == 0) continue;
                     if (browsing == -1)
@@ -126,7 +126,7 @@ static int readline(char *buf, int max)
                     continue;
                 }
 
-                case 0x81: /* KEY_DOWN */
+                case 0x81:
                 {
                     if (browsing == -1) continue;
                     if (browsing < hist_count - 1)
@@ -155,7 +155,7 @@ static int readline(char *buf, int max)
                     continue;
                 }
 
-                case 0x82: /* KEY_LEFT */
+                case 0x82:
                 {
                     if (cursor > 0)
                     {
@@ -165,7 +165,7 @@ static int readline(char *buf, int max)
                     continue;
                 }
 
-                case 0x83: /* KEY_RIGHT */
+                case 0x83:
                 {
                     if (cursor < idx)
                     {
@@ -175,21 +175,21 @@ static int readline(char *buf, int max)
                     continue;
                 }
 
-                case 0x84: /* KEY_HOME */
+                case 0x84:
                 {
                     cursor = 0;
                     redraw_line(buf, idx, cursor);
                     continue;
                 }
 
-                case 0x85: /* KEY_END */
+                case 0x85:
                 {
                     cursor = idx;
                     redraw_line(buf, idx, cursor);
                     continue;
                 }
 
-                case 0x86: /* KEY_DEL */
+                case 0x86:
                 {
                     if (cursor < idx)
                     {
@@ -216,7 +216,7 @@ static int readline(char *buf, int max)
             {
                 switch (seq[1])
                 {
-                    case 'A': /* Up */
+                    case 'A':
                     {
                         if (hist_count == 0) continue;
                         if (browsing == -1)
@@ -248,7 +248,7 @@ static int readline(char *buf, int max)
                         continue;
                     }
 
-                    case 'B': /* Down */
+                    case 'B':
                     {
                         if (browsing == -1) continue;
                         if (browsing < hist_count - 1)
@@ -277,7 +277,7 @@ static int readline(char *buf, int max)
                         continue;
                     }
 
-                    case 'C': /* Right */
+                    case 'C':
                     {
                         if (cursor < idx)
                         {
@@ -287,7 +287,7 @@ static int readline(char *buf, int max)
                         continue;
                     }
 
-                    case 'D': /* Left */
+                    case 'D':
                     {
                         if (cursor > 0)
                         {
@@ -297,21 +297,21 @@ static int readline(char *buf, int max)
                         continue;
                     }
 
-                    case 'H': /* Home */
+                    case 'H':
                     {
                         cursor = 0;
                         redraw_line(buf, idx, cursor);
                         continue;
                     }
 
-                    case 'F': /* End */
+                    case 'F':
                     {
                         cursor = idx;
                         redraw_line(buf, idx, cursor);
                         continue;
                     }
 
-                    case '3': /* Del (ESC[3~) */
+                    case '3':
                     {
                         char tilde;
                         if (read(0, &tilde, 1) > 0 && tilde == '~')
@@ -441,7 +441,7 @@ static int run_cmd(int argc, char **argv)
         {
             int len = 0;
             while (cwd_buf[len] != '\0') len++;
-            
+
             write(1, cwd_buf, len);
             write(1, "\n", 1);
         }
@@ -454,8 +454,8 @@ static int run_cmd(int argc, char **argv)
 
     if (strcmp(argv[0], "exit") == 0)
     {
-        syscall(SYS_exit, 0, 0, 0); 
-        return 0; 
+        syscall(SYS_exit, 0, 0, 0);
+        return 0;
     }
 
     if (strcmp(argv[0], "export") == 0)
@@ -472,7 +472,7 @@ static int run_cmd(int argc, char **argv)
     }
 
     char buffer[256];
-    
+
     int cmd_len = 0;
     while (argv[0][cmd_len] != '\0') cmd_len++;
     if (cmd_len > 200) return -1;

@@ -71,17 +71,17 @@ void kmain(void)
     idt_init();
     serial_write("IDT initialized (exceptions + IRQs).\n");
 
-    /* Enable FPU + SSE */
+
     uint64_t cr4;
     __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
-    cr4 |= (1 << 9) | (1 << 10); /* OSFXSR | OSXMMEXCPT */
-    cr4 &= ~(1 << 2);            /* clear EM (FPU emulation) */
-    cr4 |= (1 << 1);             /* set MP (monitor FPU) */
+    cr4 |= (1 << 9) | (1 << 10);
+    cr4 &= ~(1 << 2);
+    cr4 |= (1 << 1);
     __asm__ volatile("mov %0, %%cr4" : : "r"(cr4));
 
-    /* Initialize x87 FPU */
+
     __asm__ volatile("fwait; fninit");
-    /* Initialize SSE MXCSR to default (masked, round-to-nearest) */
+
     uint32_t mxcsr = 0x1F80;
     __asm__ volatile("ldmxcsr %0" : : "m"(mxcsr));
     serial_write("FPU/SSE: enabled\n");

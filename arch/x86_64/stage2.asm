@@ -3,9 +3,9 @@ bits 16
 
 STAGE2_SIZE equ 4096
 
-; ============================================================
-; Entry — real mode, jumped from stage1 at 0x7C00
-; ============================================================
+
+
+
 _start:
     xor ax, ax
     mov ds, ax
@@ -22,15 +22,15 @@ _start:
     mov cr0, eax
     jmp 0x08:init_pm
 
-; ============================================================
-; VBE initialization — real mode, 16-bit
-; ============================================================
+
+
+
 vbe_init:
     push es
     push ds
     pushad
 
-    ; Get VBE Controller Info
+
     mov ax, 0x4F00
     mov di, 0x5100
     int 0x10
@@ -43,7 +43,7 @@ vbe_init:
     cmp word [0x5104], 0x0200
     jb  .no_vbe
 
-    ; VideoModePtr at VBEInfo+0x0E (offset), +0x10 (segment)
+
     mov ax, [0x5110]
     mov fs, ax
     mov si, [0x510E]
@@ -61,7 +61,7 @@ vbe_init:
     cmp ax, 0x004F
     jne .skip
 
-    ; ModeAttributes[0] bit 7 = LFB
+
     test word [0x5300], 0x0080
     jz   .skip
 
@@ -72,7 +72,7 @@ vbe_init:
     cmp byte [0x5319], 32
     jne .skip
 
-    ; Set mode with LFB bit (bit 14)
+
     mov ax, 0x4F02
     or  cx, 0x4000
     mov bx, cx
@@ -80,17 +80,17 @@ vbe_init:
     cmp ax, 0x004F
     jne .skip
 
-    ; Store fb_info at 0x7E00 (below stage2, above stack)
+
     mov eax, [0x5328]
-    mov [0x7E00], eax        ; phys_addr
+    mov [0x7E00], eax
     movzx eax, word [0x5312]
-    mov [0x7E08], eax        ; width
+    mov [0x7E08], eax
     movzx eax, word [0x5314]
-    mov [0x7E0C], eax        ; height
+    mov [0x7E0C], eax
     movzx eax, byte [0x5319]
-    mov [0x7E10], eax        ; bpp
+    mov [0x7E10], eax
     movzx eax, word [0x5310]
-    mov [0x7E14], eax        ; pitch
+    mov [0x7E14], eax
 
     popad
     pop ds
@@ -113,9 +113,9 @@ vbe_init:
     pop es
     ret
 
-; ============================================================
-; Protected mode — 32-bit
-; ============================================================
+
+
+
 bits 32
 init_pm:
     mov ax, 0x10
@@ -124,24 +124,24 @@ init_pm:
     mov es, ax
     mov esp, 0x90000
 
-    ; Copy kernel from after stage2 to 0x100000
+
     mov esi, 0x8000 + STAGE2_SIZE
     mov edi, 0x100000
     mov ecx, (216 * 512 - STAGE2_SIZE) / 4
     rep movsd
 
-    ; Page tables at 0x1000
+
     mov edi, 0x1000
     mov cr3, edi
     xor eax, eax
     mov ecx, 4096
     rep stosd
 
-    mov dword [0x1000], 0x2003   ; PML4[0] -> PDPT at 0x2000
-    mov dword [0x2000], 0x3003   ; PDPT[0] -> PD at 0x3000
-    mov dword [0x3000], 0x4003   ; PD[0] -> PT at 0x4000
+    mov dword [0x1000], 0x2003
+    mov dword [0x2000], 0x3003
+    mov dword [0x3000], 0x4003
 
-    ; Identity map 0-2MB
+
     mov edi, 0x4000
     mov ebx, 0x00000003
     mov ecx, 512
@@ -151,7 +151,7 @@ init_pm:
     add ebx, 0x1000
     loop .pt0
 
-    ; Identity map 2-4MB
+
     mov dword [0x3008], 0x5003
     mov edi, 0x5000
     mov ebx, 0x00200003
@@ -164,7 +164,7 @@ init_pm:
     add ebx, 0x1000
     loop .pt1
 
-    ; 2MB huge pages for remaining RAM from E820
+
     movzx ecx, word [0x0FFC]
     test ecx, ecx
     jz .no_huge
@@ -198,29 +198,29 @@ init_pm:
     loop .huge
 .no_huge:
 
-    ; Enable PAE
+
     mov eax, cr4
     or eax, 1 << 5
     mov cr4, eax
 
-    ; Set EFER.LME
+
     mov ecx, 0xC0000080
     rdmsr
     or eax, 1 << 8
     wrmsr
 
-    ; Enable paging
+
     mov eax, cr0
     or eax, 1 << 31
     mov cr0, eax
 
-    ; Switch to long mode
+
     lgdt [gdt64_desc]
     jmp 0x08:0x100000
 
-; ============================================================
-; GDT — 32-bit protected mode
-; ============================================================
+
+
+
 align 8
 gdt32_start:
     dq 0x0
@@ -236,9 +236,9 @@ gdt32_desc:
     dw gdt32_end - gdt32_start - 1
     dd gdt32_start
 
-; ============================================================
-; GDT — 64-bit long mode
-; ============================================================
+
+
+
 align 8
 gdt64_start:
     dq 0x0

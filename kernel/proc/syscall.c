@@ -34,7 +34,7 @@
 #define SYS_GETCWD   79
 #define SYS_CHDIR    80
 
-/* TEMP FUNCTION */
+
 static void normalize_path(const char *cwd, const char *input, char *output, uint64_t max_len)
 {
     char temp[256];
@@ -79,7 +79,7 @@ static void normalize_path(const char *cwd, const char *input, char *output, uin
         if (segment[0] == '\0' || (segment[0] == '.' && segment[1] == '\0'))
         {
             continue;
-        } 
+        }
         else if (segment[0] == '.' && segment[1] == '.' && segment[2] == '\0')
         {
             if (t_idx > 1) {
@@ -90,7 +90,7 @@ static void normalize_path(const char *cwd, const char *input, char *output, uin
                 if (t_idx == 0) t_idx = 1;
                 temp[t_idx] = '\0';
             }
-        } 
+        }
         else
         {
             if (t_idx > 1 && temp[t_idx - 1] != '/') {
@@ -346,7 +346,7 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
             task_exit((int)frame->rdi);
             result = 0;
             break;
-        
+
         case SYS_GETCWD:
         {
             char *user_buf = (char *)frame->rdi;
@@ -369,7 +369,7 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
                 result = -1;
                 break;
             }
-            
+
             for (uint64_t i = 0; i <= path_len; i++)
             {
                 user_buf[i] = current_task->cwd[i];
@@ -393,13 +393,13 @@ uint64_t syscall_entry(struct pushaq_frame *frame)
 
             struct vfs_dentry entry;
             int stat_res = vfs_stat(target_path, &entry);
-            
+
             if (stat_res != 0)
             {
                 result = -1;
                 break;
             }
-            
+
             uint64_t i = 0;
             while (target_path[i] != '\0' && i < sizeof(current_task->cwd) - 1)
             {

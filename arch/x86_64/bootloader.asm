@@ -6,13 +6,13 @@ _start:
     mov ds, ax
     mov es, ax
 
-    ; Check LBA extensions
+
     mov ah, 0x41
     mov bx, 0x55AA
     int 0x13
     jc disk_error
 
-    ; Load stage2 + kernel (216 sectors from LBA 1) to 0x8000
+
     mov si, dap
     mov ah, 0x42
     int 0x13
@@ -23,7 +23,7 @@ _start:
     int 0x13
     jc disk_error
 
-    ; Get E820 memory map
+
     mov di, 0x6000
     xor ebx, ebx
     xor bp, bp
@@ -40,7 +40,7 @@ _start:
 .e820_done:
     mov [0x0FFC], bp
 
-    ; Jump to stage2 at 0x8000
+
     jmp 0:0x8000
 
 align 4

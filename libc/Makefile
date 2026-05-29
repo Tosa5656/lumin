@@ -11,7 +11,7 @@ LIBC_OBJS = obj/errno/errno.o obj/stdlib/exit.o obj/stdlib/malloc.o \
 all: libc.a
 
 mkdirs:
-	mkdir -p obj obj/errno obj/stdlib obj/string obj/stdio obj/unistd
+	mkdir -p obj obj/errno obj/stdlib obj/string obj/stdio obj/unistd obj/signal
 
 obj/crt0.o: crt/crt0.asm
 	$(AS) -f elf64 $< -o $@
